@@ -1,0 +1,6 @@
+{
+  "name": "TI Battleground",
+  "description": "Jogo de cartas sátira sobre o mercado de TI em formato Jogador vs. Computador.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

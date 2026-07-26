@@ -1,0 +1,93 @@
+export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade';
+
+export type CharacterGender = 'M' | 'F';
+
+export interface CardTemplate {
+  id: string;
+  name: string;
+  role: string;
+  gender: CharacterGender;
+  baseCost: number;
+  baseAttack: number;
+  baseDefense: number;
+  isPJ: boolean;
+  avatarSvg: string; // Custom SVG illustration path or code identifier
+  flavorText: string;
+  quote: string;
+}
+
+export interface GameCard {
+  instanceId: string;
+  templateId: string;
+  name: string;
+  role: string;
+  gender: CharacterGender;
+  cost: number;
+  attack: number;
+  defense: number;
+  maxDefense: number;
+  isPJ: boolean;
+  modifiers: CardModifier[];
+  hasProtection: boolean; // Lost after absorbing 1 hit
+  hasAttackedThisTurn: number; // Max allowed depends on ataque_duplo (1 or 2)
+  isStunned: boolean; // From events
+  pjBlocked: boolean; // From Baixa Demanda event
+  avatarSvg: string;
+  quote: string;
+  owner: 'player' | 'computer';
+  
+  // Temporary buff modifiers
+  attackBuff: number;
+  defenseBuff: number;
+}
+
+export type EventType =
+  | 'layoff'
+  | 'bug_producao'
+  | 'problema_trens'
+  | 'home_office'
+  | 'pai_recem_nascido'
+  | 'gripe'
+  | 'gravidez'
+  | 'baixa_demanda'
+  | 'outros_imprevistos';
+
+export interface GlobalEvent {
+  id: string;
+  type: EventType;
+  title: string;
+  description: string;
+  targetPlayer: 'player' | 'computer' | 'both';
+  turn: number;
+  timestamp: string;
+}
+
+export interface PlayerState {
+  id: 'player' | 'computer';
+  name: string;
+  coffee: number; // Max 10
+  hand: GameCard[];
+  board: GameCard[];
+  firedCount: number;
+  canAttackThisTurn: boolean; // Affected by Problema nos Trens
+  canPlayCardsThisTurn: boolean; // Affected by Gripe
+  drawBlockedRounds: number; // Affected by Gravidez?
+  extraCoffeeCostRounds: number; // Affected by Pai de Recém-Nascido (+1 cost)
+}
+
+export interface AttackAnimation {
+  attackerId: string;
+  defenderId: string;
+  damageToDefender: number;
+  damageToAttacker: number;
+  defenderBlockedByProtection: boolean;
+  attackerBlockedByProtection: boolean;
+}
+
+export interface VisualEffect {
+  id: string;
+  type: 'attack' | 'event' | 'coffee_drain' | 'coffee_gain' | 'fired';
+  targetCardId?: string;
+  targetPlayerId?: 'player' | 'computer';
+  message?: string;
+}

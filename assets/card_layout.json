@@ -1,0 +1,51 @@
+{
+  "card_size": {
+    "width": 768,
+    "height": 512
+  },
+  "custo": {
+    "shape": "circle",
+    "bbox": [
+      4,
+      4,
+      120,
+      118
+    ]
+  },
+  "ataque": {
+    "shape": "circle",
+    "bbox": [
+      4,
+      340,
+      120,
+      452
+    ]
+  },
+  "defesa": {
+    "shape": "circle",
+    "bbox": [
+      652,
+      340,
+      764,
+      452
+    ]
+  },
+  "modifiers_row": {
+    "shape": "rect",
+    "bbox": [
+      230,
+      6,
+      537,
+      40
+    ]
+  },
+  "contrato_pj_tag": {
+    "shape": "rect",
+    "bbox": [
+      4,
+      128,
+      140,
+      158
+    ]
+  }
+}
