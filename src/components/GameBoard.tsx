@@ -10,9 +10,8 @@ import { CardBack } from './CardBack';
 import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
-import { GoogleDriveModal } from './GoogleDriveModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, HardDrive } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -60,16 +59,17 @@ export const GameBoard: React.FC = () => {
     'Jogo iniciado. Que vença o desenvolvedor mais resiliente!',
   ]);
 
-  // Selected attacker card on player board
+  // Selected attacker card on player board & Selected hand card
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
+  const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [attackingCardId, setAttackingCardId] = useState<string | null>(null);
   const [attackDirection, setAttackDirection] = useState<'up' | 'down'>('up');
   const [hitCardId, setHitCardId] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [isGameStarted, setIsGameStarted] = useState<boolean>(false);
 
   // Modals & Sound
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
-  const [isDriveModalOpen, setIsDriveModalOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [winner, setWinner] = useState<'player' | 'computer' | null>(null);
 
@@ -141,13 +141,15 @@ export const GameBoard: React.FC = () => {
     setActiveEvent(null);
     setEventHistory([]);
     setSelectedAttackerId(null);
+    setSelectedHandCardId(null);
     setAttackingCardId(null);
     setHitCardId(null);
     setIsAnimating(false);
     setWinner(null);
+    setIsGameStarted(true);
     setLogs([
       '🎮 Jogo iniciado! As cartas só entram em campo quando você paga o custo de Café.',
-      '☕ Clique em uma carta da sua mão para colocá-la na mesa.',
+      '☕ Clique em uma carta da sua mão para selecionar e ver o botão de compra.',
     ]);
   };
 
@@ -157,7 +159,12 @@ export const GameBoard: React.FC = () => {
 
   // --- VICTORY / DEFEAT EVALUATION ---
   useEffect(() => {
-    if (winner || isAnimating) return;
+    if (!isGameStarted || winner || isAnimating) return;
+
+    // Do not check victory if game initialization is incomplete or empty
+    if (player.hand.length === 0 && player.board.length === 0 && computer.hand.length === 0 && computer.board.length === 0) {
+      return;
+    }
 
     // Check if player is completely cleared
     const playerHasAliveCards = player.board.some(c => c.defense > 0);
@@ -168,10 +175,10 @@ export const GameBoard: React.FC = () => {
 
     if (!playerHasAliveCards && !playerCanPlayMore && player.hand.length === 0 && playerDeckEmpty) {
       setWinner('computer');
-    } else if (!computerHasAliveCards && computer.hand.length === 0 && playerHasAliveCards) {
+    } else if (!computerHasAliveCards && computer.hand.length === 0 && computer.board.length === 0 && playerHasAliveCards) {
       setWinner('player');
     }
-  }, [player, computer, deck, winner, isAnimating]);
+  }, [isGameStarted, player, computer, deck, winner, isAnimating]);
 
   // --- PLAYER ACTIONS ---
 
@@ -610,14 +617,6 @@ export const GameBoard: React.FC = () => {
         {/* Controls */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsDriveModalOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-            title="Mover e Gerenciar 'assets/card_info' no Google Drive"
-          >
-            <HardDrive className="w-4 h-4 text-cyan-400 animate-pulse" />
-            <span className="hidden sm:inline">Google Drive</span>
-          </button>
-          <button
             onClick={() => setIsRulesOpen(true)}
             className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer"
             title="Regras do Jogo"
@@ -757,6 +756,106 @@ export const GameBoard: React.FC = () => {
           </div>
         </div>
 
+        {/* 3.5 UNBOUGHT CARD SELECTION PANEL (STATUSBAR & BUY BUTTON LADO-A-LADO) */}
+        {(() => {
+          const selectedHandCard = player.hand.find(c => c.instanceId === selectedHandCardId) || null;
+          if (!selectedHandCard) return null;
+
+          const actualCost = getActualCardCost(selectedHandCard, player);
+          const canAfford = player.coffee >= actualCost;
+          const isMyTurn = currentTurnOwner === 'player';
+          const handIndex = player.hand.findIndex(c => c.instanceId === selectedHandCard.instanceId);
+          const canBuy = canAfford && isMyTurn && !isAnimating && handIndex !== -1 && player.board.length < 5;
+
+          return (
+            <div className="bg-slate-900 border-2 border-cyan-400 p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+              {/* 2.1 - STATUSBAR COM RESUMO DE MODIFICADORES E CONTRATO PJ */}
+              <div className="flex-1 flex flex-col gap-1 text-xs text-left w-full">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-black text-white text-sm">{selectedHandCard.name}</span>
+                  <span className="text-cyan-400 font-semibold text-xs">({selectedHandCard.role})</span>
+                  <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 font-mono text-[11px] text-slate-200">
+                    ⚔️ A: {selectedHandCard.attack + selectedHandCard.attackBuff} | 🛡️ D: {selectedHandCard.defense} | ☕ Custo: {actualCost}
+                  </span>
+                  {selectedHandCard.isPJ ? (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
+                      selectedHandCard.pjBlocked 
+                        ? 'bg-red-950 text-red-300 border-red-500/80' 
+                        : 'bg-amber-950 text-amber-300 border-amber-500/80'
+                    }`}>
+                      {selectedHandCard.pjBlocked ? '📄 PJ BLOQUEADO (Baixa Demanda)' : '📄 CONTRATO PJ (Sem Direitos CLT)'}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded border bg-emerald-950 text-emerald-300 border-emerald-500/80">
+                      📄 CONTRATO CLT (Protegido)
+                    </span>
+                  )}
+                </div>
+
+                {/* MODIFICADORES DA CARTA */}
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
+                  <span className="text-slate-400 font-medium">Modificadores:</span>
+                  {selectedHandCard.hasProtection && (
+                    <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
+                      <Shield className="w-3 h-3 text-emerald-400" /> Proteção (Anula próximo dano)
+                    </span>
+                  )}
+                  {selectedHandCard.modifiers.includes('buff') && (
+                    <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
+                      <Zap className="w-3 h-3 text-amber-400" /> Buff (+1/+1)
+                    </span>
+                  )}
+                  {selectedHandCard.modifiers.includes('ataque_duplo') && (
+                    <span className="text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/50 flex items-center gap-1 font-semibold">
+                      <Swords className="w-3 h-3 text-rose-400" /> Ataque Duplo (2x/turno)
+                    </span>
+                  )}
+                  {selectedHandCard.modifiers.includes('prioridade') && (
+                    <span className="text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-500/50 flex items-center gap-1 font-semibold">
+                      <Target className="w-3 h-3 text-purple-300" /> Prioridade (Taunt)
+                    </span>
+                  )}
+                  {selectedHandCard.isStunned && (
+                    <span className="text-yellow-300 bg-yellow-950/80 px-2 py-0.5 rounded border border-yellow-500/50 flex items-center gap-1 font-semibold">
+                      <Lock className="w-3 h-3 text-yellow-400" /> Atordoado
+                    </span>
+                  )}
+                  {!selectedHandCard.isPJ && !selectedHandCard.hasProtection && !selectedHandCard.modifiers.length && !selectedHandCard.isStunned && (
+                    <span className="text-slate-400 italic">Nenhum modificador ativo (Contrato Padrão)</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 2.2 - BOTÃO COMPRAR */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (canBuy && handIndex !== -1) {
+                    handlePlayCardFromHand(selectedHandCard, handIndex);
+                  }
+                }}
+                disabled={!canBuy}
+                className={`shrink-0 py-2.5 px-5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
+                  canBuy
+                    ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/40 active:scale-95 ring-2 ring-emerald-400/50'
+                    : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                }`}
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {canBuy
+                  ? `Comprar / Contratar (-${actualCost} ☕)`
+                  : !canAfford
+                  ? `Café Insuficiente (${player.coffee}/${actualCost} ☕)`
+                  : !isMyTurn
+                  ? 'Aguarde seu Turno'
+                  : player.board.length >= 5
+                  ? 'Mesa Cheia (Máx 5)'
+                  : 'Indisponível'}
+              </button>
+            </div>
+          );
+        })()}
+
         {/* 4. PLAYER ZONE (BOTTOM) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
           {/* Player Active Board Cards */}
@@ -764,7 +863,7 @@ export const GameBoard: React.FC = () => {
             {player.board.length === 0 ? (
               <div className="text-slate-500 text-xs italic flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-slate-500" />
-                Seu campo está vazio! Jogue cartas da mão abaixo para defender sua equipe.
+                Seu campo está vazio! Selecione e compre cartas da sua mão para defender sua equipe.
               </div>
             ) : (
               player.board.map((card) => {
@@ -811,23 +910,28 @@ export const GameBoard: React.FC = () => {
               {player.hand.length === 0 ? (
                 <span className="text-slate-600 text-xs italic">Sua mão está vazia!</span>
               ) : (
-                player.hand.map((card, index) => {
+                player.hand.map((card) => {
                   const actualCost = getActualCardCost(card, player);
                   const canAfford = player.coffee >= actualCost;
                   const isAffected = isCardAffectedByEvent(card, activeEvent, 'player');
+                  const isSelectedHand = selectedHandCardId === card.instanceId;
+
                   return (
                     <div
                       key={card.instanceId}
                       className={`w-28 sm:w-36 transition-transform ${
-                        canAfford ? 'hover:-translate-y-2 cursor-pointer' : 'opacity-60 grayscale'
+                        isSelectedHand
+                          ? 'scale-105 -translate-y-2'
+                          : canAfford ? 'hover:-translate-y-1 cursor-pointer' : 'opacity-60 grayscale'
                       }`}
                     >
                       <CardView
                         card={card}
                         actualCost={actualCost}
+                        isSelected={isSelectedHand}
                         isAffectedByEvent={isAffected}
                         eventName={activeEvent?.title}
-                        onClick={() => handlePlayCardFromHand(card, index)}
+                        onClick={() => setSelectedHandCardId(prev => prev === card.instanceId ? null : card.instanceId)}
                       />
                     </div>
                   );
@@ -840,7 +944,6 @@ export const GameBoard: React.FC = () => {
 
       {/* MODALS */}
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
-      <GoogleDriveModal isOpen={isDriveModalOpen} onClose={() => setIsDriveModalOpen(false)} />
       <GameOverModal
         isOpen={winner !== null}
         winner={winner}
