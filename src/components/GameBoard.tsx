@@ -73,6 +73,16 @@ export const GameBoard: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [winner, setWinner] = useState<'player' | 'computer' | null>(null);
 
+  // Event animation duration timer: Event animations last 3 seconds, then terminate
+  useEffect(() => {
+    if (activeEvent) {
+      const timer = setTimeout(() => {
+        setActiveEvent(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeEvent]);
+
   // Helper to check if a card is affected by the active event
   const isCardAffectedByEvent = (card: GameCard, event: GlobalEvent | null, owner: 'player' | 'computer') => {
     if (!event) return false;
@@ -389,6 +399,9 @@ export const GameBoard: React.FC = () => {
       updatedC = outcome.updatedComputer;
       setTurnsSinceLastEvent(0);
       setLogs(prev => [...prev, outcome.logMessage]);
+
+      // Pause for 3s event animation duration
+      await new Promise(r => setTimeout(r, 3000));
     } else {
       setTurnsSinceLastEvent(prev => prev + 1);
     }
