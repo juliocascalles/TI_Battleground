@@ -10,8 +10,9 @@ import { CardBack } from './CardBack';
 import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
+import { GoogleDriveModal } from './GoogleDriveModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, HardDrive } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -68,6 +69,7 @@ export const GameBoard: React.FC = () => {
 
   // Modals & Sound
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [winner, setWinner] = useState<'player' | 'computer' | null>(null);
 
@@ -595,6 +597,14 @@ export const GameBoard: React.FC = () => {
         {/* Controls */}
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsDriveModalOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            title="Mover e Gerenciar 'assets/card_info' no Google Drive"
+          >
+            <HardDrive className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span className="hidden sm:inline">Google Drive</span>
+          </button>
+          <button
             onClick={() => setIsRulesOpen(true)}
             className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer"
             title="Regras do Jogo"
@@ -817,6 +827,7 @@ export const GameBoard: React.FC = () => {
 
       {/* MODALS */}
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+      <GoogleDriveModal isOpen={isDriveModalOpen} onClose={() => setIsDriveModalOpen(false)} />
       <GameOverModal
         isOpen={winner !== null}
         winner={winner}

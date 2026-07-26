@@ -1,5 +1,5 @@
-import React from 'react';
-import versoImg from '../assets/verso_da_carta.png';
+import React, { useState, useEffect } from 'react';
+import { getAssetUrl } from '../utils/driveAssetUrls';
 
 interface CardBackProps {
   className?: string;
@@ -8,6 +8,16 @@ interface CardBackProps {
 }
 
 export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, countLabel }) => {
+  const [versoUrl, setVersoUrl] = useState(() => getAssetUrl('verso_da_carta.png'));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setVersoUrl(getAssetUrl('verso_da_carta.png'));
+    };
+    window.addEventListener('drive_assets_updated', handleUpdate);
+    return () => window.removeEventListener('drive_assets_updated', handleUpdate);
+  }, []);
+
   return (
     <div
       onClick={onClick}
@@ -15,7 +25,7 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
     >
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
         <img
-          src={versoImg}
+          src={versoUrl}
           alt="Verso da Carta"
           className="w-[150%] h-[150%] max-w-none object-cover select-none pointer-events-none -rotate-90 origin-center"
           draggable={false}

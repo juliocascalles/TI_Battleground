@@ -1,22 +1,29 @@
-import React from 'react';
-import johnyImg from '../assets/char_img/Johny_da_Silva.png';
-import thaisImg from '../assets/char_img/Thais_Tudano.png';
-import igorImg from '../assets/char_img/Igor_Dinho.png';
-import giseleImg from '../assets/char_img/Gisele_Gante.png';
+import React, { useState, useEffect } from 'react';
+import { getAssetUrl, DriveAssetMapping } from '../utils/driveAssetUrls';
 
 interface CardSvgAvatarProps {
   avatarId: string;
 }
 
-const imageMap: Record<string, string> = {
-  johny: johnyImg,
-  thais: thaisImg,
-  igor: igorImg,
-  gisele: giseleImg,
+const avatarFileNameMap: Record<string, keyof DriveAssetMapping> = {
+  johny: 'Johny_da_Silva.png',
+  thais: 'Thais_Tudano.png',
+  igor: 'Igor_Dinho.png',
+  gisele: 'Gisele_Gante.png',
 };
 
 export const CardSvgAvatar: React.FC<CardSvgAvatarProps> = ({ avatarId }) => {
-  const imgSrc = imageMap[avatarId] || johnyImg;
+  const fileName = avatarFileNameMap[avatarId] || 'Johny_da_Silva.png';
+  const [imgSrc, setImgSrc] = useState(() => getAssetUrl(fileName));
+
+  useEffect(() => {
+    setImgSrc(getAssetUrl(fileName));
+    const handleUpdate = () => {
+      setImgSrc(getAssetUrl(fileName));
+    };
+    window.addEventListener('drive_assets_updated', handleUpdate);
+    return () => window.removeEventListener('drive_assets_updated', handleUpdate);
+  }, [fileName]);
 
   return (
     <img
