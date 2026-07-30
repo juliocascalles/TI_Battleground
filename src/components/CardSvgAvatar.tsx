@@ -32,12 +32,22 @@ export const CardSvgAvatar: React.FC<CardSvgAvatarProps> = ({ avatarId }) => {
   }, [avatarId]);
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    // Stop browser onError infinite loop immediately
+    // Prevent infinite loop
     e.currentTarget.onerror = null;
 
     const canonical = getCanonicalFileName(avatarId);
-    const localUrl = LOCAL_ASSETS[canonical] || LOCAL_ASSETS['Johny_da_Silva.png'];
+    
+    // Extract drive ID if present
+    const idMatch = imgSrc.match(/id=([a-zA-Z0-9_-]+)/);
+    if (idMatch && idMatch[1]) {
+      const driveCdnUrl = `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+      if (imgSrc !== driveCdnUrl) {
+        setImgSrc(driveCdnUrl);
+        return;
+      }
+    }
 
+    const localUrl = LOCAL_ASSETS[canonical] || LOCAL_ASSETS['Johny_da_Silva.png'];
     if (localUrl && imgSrc !== localUrl) {
       setImgSrc(localUrl);
     } else {

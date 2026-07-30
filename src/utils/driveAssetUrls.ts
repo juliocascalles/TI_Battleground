@@ -37,16 +37,16 @@ export const LOCAL_ASSETS: Record<string, string> = {
   'card_overlay_template.svg': overlaySvg || '/assets/card_overlay_template.svg',
 };
 
-// Public direct image URLs (converted to lh3 CDN viewer format for direct embedding)
+// Public direct download URLs requested by user
 export const PUBLIC_ASSET_URLS: Record<string, string> = {
-  'Gisele_Gante.png': 'https://lh3.googleusercontent.com/d/1lynqDf2CwizUEoE6CvmMcvcN0QTIiBxz',
-  'Igor_Dinho.png': 'https://lh3.googleusercontent.com/d/1x0yz99-9r4xWRlqP7cNinYb8gcYELMwH',
-  'Johny_da_Silva.png': 'https://lh3.googleusercontent.com/d/1WhyKeVVoPxlY1lL47DJ2s5fyaShUFs_n',
-  'Jussara_das_Dores.png': 'https://lh3.googleusercontent.com/d/17EcMDEDsii1flZNF1auXxe59V1M2YZa5',
-  'Silas_Kow.png': 'https://lh3.googleusercontent.com/d/1tzKtwC6IC3d58yKTy2upajem_iSePne5',
-  'Thais_Tudano.png': 'https://lh3.googleusercontent.com/d/14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
-  'Tahis_Tudano.png': 'https://lh3.googleusercontent.com/d/14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
-  'Tomas_Tigano.png': 'https://lh3.googleusercontent.com/d/1pLz6nxwjG-Kw35X_zp17bPMQ8b-LkAB2',
+  'Gisele_Gante.png': 'https://drive.usercontent.google.com/download?id=1lynqDf2CwizUEoE6CvmMcvcN0QTIiBxz',
+  'Igor_Dinho.png': 'https://drive.usercontent.google.com/download?id=1x0yz99-9r4xWRlqP7cNinYb8gcYELMwH',
+  'Johny_da_Silva.png': 'https://drive.usercontent.google.com/download?id=1WhyKeVVoPxlY1lL47DJ2s5fyaShUFs_n',
+  'Jussara_das_Dores.png': 'https://drive.usercontent.google.com/download?id=17EcMDEDsii1flZNF1auXxe59V1M2YZa5',
+  'Silas_Kow.png': 'https://drive.usercontent.google.com/download?id=1tzKtwC6IC3d58yKTy2upajem_iSePne5',
+  'Thais_Tudano.png': 'https://drive.usercontent.google.com/download?id=14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
+  'Tahis_Tudano.png': 'https://drive.usercontent.google.com/download?id=14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
+  'Tomas_Tigano.png': 'https://drive.usercontent.google.com/download?id=1pLz6nxwjG-Kw35X_zp17bPMQ8b-LkAB2',
 };
 
 export const getCanonicalFileName = (input: string): string => {
@@ -71,17 +71,17 @@ export const getCanonicalFileName = (input: string): string => {
 };
 
 export const getAssetUrl = (fileName: keyof DriveAssetMapping | string): string => {
-  if (!fileName) return LOCAL_ASSETS['Johny_da_Silva.png'];
+  if (!fileName) return PUBLIC_ASSET_URLS['Johny_da_Silva.png'];
 
   const canonical = getCanonicalFileName(fileName);
 
-  // 1. Prefer local bundled assets first (100% reliable, zero network latency/errors, works everywhere)
-  if (LOCAL_ASSETS[fileName]) return LOCAL_ASSETS[fileName];
-  if (LOCAL_ASSETS[canonical]) return LOCAL_ASSETS[canonical];
-
-  // 2. Public URLs fallback
+  // 1. Prefer public exact URLs specified by the user
   if (PUBLIC_ASSET_URLS[fileName]) return PUBLIC_ASSET_URLS[fileName];
   if (PUBLIC_ASSET_URLS[canonical]) return PUBLIC_ASSET_URLS[canonical];
 
-  return LOCAL_ASSETS['Johny_da_Silva.png'];
+  // 2. Local assets fallback
+  if (LOCAL_ASSETS[fileName]) return LOCAL_ASSETS[fileName];
+  if (LOCAL_ASSETS[canonical]) return LOCAL_ASSETS[canonical];
+
+  return PUBLIC_ASSET_URLS['Johny_da_Silva.png'];
 };
