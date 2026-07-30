@@ -11,6 +11,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 import { GoogleDriveModal } from './GoogleDriveModal';
+import { verifyDriveAssetsOnStartup } from '../utils/driveAssetUrls';
 
 import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, HardDrive } from 'lucide-react';
 
@@ -75,6 +76,11 @@ export const GameBoard: React.FC = () => {
   const [isDriveModalOpen, setIsDriveModalOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [winner, setWinner] = useState<'player' | 'computer' | null>(null);
+
+  // Test Drive assets ONCE on app start
+  useEffect(() => {
+    verifyDriveAssetsOnStartup();
+  }, []);
 
   // Event animation duration timer: Event animations last 3 seconds, then terminate
   useEffect(() => {

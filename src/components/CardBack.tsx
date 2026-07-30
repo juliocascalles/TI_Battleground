@@ -9,19 +9,24 @@ interface CardBackProps {
 
 export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, countLabel }) => {
   const [versoUrl, setVersoUrl] = useState(() => getAssetUrl('verso_da_carta.png'));
+  const [hasErrored, setHasErrored] = useState(false);
 
   useEffect(() => {
     const handleUpdate = () => {
       setVersoUrl(getAssetUrl('verso_da_carta.png'));
+      setHasErrored(false);
     };
     window.addEventListener('drive_assets_updated', handleUpdate);
     return () => window.removeEventListener('drive_assets_updated', handleUpdate);
   }, []);
 
   const handleImageError = () => {
-    const publicPath = '/assets/verso_da_carta.png';
-    if (versoUrl !== publicPath) {
-      setVersoUrl(publicPath);
+    if (!hasErrored) {
+      setHasErrored(true);
+      const publicPath = '/assets/verso_da_carta.png';
+      if (versoUrl !== publicPath) {
+        setVersoUrl(publicPath);
+      }
     }
   };
 
@@ -35,6 +40,7 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
           src={versoUrl}
           alt="Verso da Carta"
           onError={handleImageError}
+          referrerPolicy="no-referrer"
           className="w-[150%] h-[150%] max-w-none object-cover select-none pointer-events-none -rotate-90 origin-center"
           draggable={false}
         />
