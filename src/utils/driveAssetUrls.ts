@@ -1,4 +1,13 @@
-import cardLayoutJson from '../../assets/card_layout.json';
+import cardLayoutJson from '../assets/card_layout.json';
+import versoImg from '../assets/verso_da_carta.png';
+import johnyImg from '../assets/card_info/Johny_da_Silva.png';
+import thaisImg from '../assets/card_info/Thais_Tudano.png';
+import igorImg from '../assets/card_info/Igor_Dinho.png';
+import giseleImg from '../assets/card_info/Gisele_Gante.png';
+import jussaraImg from '../assets/card_info/Jussara_das_Dores.png';
+import silasImg from '../assets/card_info/Silas_Kow.png';
+import tomasImg from '../assets/card_info/Tomas_Tigano.png';
+import overlaySvg from '../assets/card_overlay_template.svg';
 
 export interface DriveAssetMapping {
   'verso_da_carta.png': string;
@@ -13,138 +22,31 @@ export interface DriveAssetMapping {
   'card_overlay_template.svg': string;
 }
 
+// Local fallback assets
 export const LOCAL_ASSETS: Record<string, string> = {
-  'verso_da_carta.png': '/assets/verso_da_carta.png',
-  'Johny_da_Silva.png': '/assets/card_info/Johny_da_Silva.png',
-  'Thais_Tudano.png': '/assets/card_info/Thais_Tudano.png',
-  'Tahis_Tudano.png': '/assets/card_info/Thais_Tudano.png',
-  'Igor_Dinho.png': '/assets/card_info/Igor_Dinho.png',
-  'Gisele_Gante.png': '/assets/card_info/Gisele_Gante.png',
-  'Jussara_das_Dores.png': '/assets/card_info/Jussara_das_Dores.png',
-  'Silas_Kow.png': '/assets/card_info/Silas_Kow.png',
-  'Tomas_Tigano.png': '/assets/card_info/Tomas_Tigano.png',
+  'verso_da_carta.png': versoImg || '/assets/verso_da_carta.png',
+  'Johny_da_Silva.png': johnyImg || '/assets/card_info/Johny_da_Silva.png',
+  'Thais_Tudano.png': thaisImg || '/assets/card_info/Thais_Tudano.png',
+  'Tahis_Tudano.png': thaisImg || '/assets/card_info/Thais_Tudano.png',
+  'Igor_Dinho.png': igorImg || '/assets/card_info/Igor_Dinho.png',
+  'Gisele_Gante.png': giseleImg || '/assets/card_info/Gisele_Gante.png',
+  'Jussara_das_Dores.png': jussaraImg || '/assets/card_info/Jussara_das_Dores.png',
+  'Silas_Kow.png': silasImg || '/assets/card_info/Silas_Kow.png',
+  'Tomas_Tigano.png': tomasImg || '/assets/card_info/Tomas_Tigano.png',
   'card_layout.json': typeof cardLayoutJson === 'string' ? cardLayoutJson : JSON.stringify(cardLayoutJson),
-  'card_overlay_template.svg': '/assets/card_overlay_template.svg',
+  'card_overlay_template.svg': overlaySvg || '/assets/card_overlay_template.svg',
 };
 
-const STORAGE_KEY = 'ti_battleground_drive_urls';
-
-let hasTestedDriveAssets = false;
-let isDriveAssetsValid = true;
-
-export const getDriveAssetUrls = (): Record<string, string> => {
-  if (!isDriveAssetsValid) {
-    return { ...LOCAL_ASSETS };
-  }
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...LOCAL_ASSETS, ...parsed };
-    }
-  } catch {
-    // Fallback to local
-  }
-  return { ...LOCAL_ASSETS };
-};
-
-export const verifyDriveAssetsOnStartup = async (): Promise<boolean> => {
-  if (hasTestedDriveAssets) return isDriveAssetsValid;
-  hasTestedDriveAssets = true;
-
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) {
-      isDriveAssetsValid = true;
-      return true;
-    }
-
-    const parsed = JSON.parse(saved);
-    const sampleDriveUrl = Object.values(parsed).find(
-      url => typeof url === 'string' && (url.includes('googleusercontent.com') || url.includes('drive.google.com'))
-    ) as string | undefined;
-
-    if (!sampleDriveUrl) {
-      isDriveAssetsValid = true;
-      return true;
-    }
-
-    // Test loading the sample drive URL once with a fast timeout (2500ms)
-    isDriveAssetsValid = await new Promise<boolean>((resolve) => {
-      const img = new Image();
-      img.referrerPolicy = 'no-referrer';
-      let done = false;
-
-      const timer = setTimeout(() => {
-        if (!done) {
-          done = true;
-          resolve(false);
-        }
-      }, 2500);
-
-      img.onload = () => {
-        if (!done) {
-          done = true;
-          clearTimeout(timer);
-          resolve(true);
-        }
-      };
-
-      img.onerror = () => {
-        if (!done) {
-          done = true;
-          clearTimeout(timer);
-          resolve(false);
-        }
-      };
-
-      img.src = sampleDriveUrl;
-    });
-
-    if (!isDriveAssetsValid) {
-      console.warn('⚠️ Google Drive asset URLs failed startup test. Reverting to local assets.');
-      localStorage.removeItem(STORAGE_KEY);
-      window.dispatchEvent(new Event('drive_assets_updated'));
-    }
-  } catch (err) {
-    console.warn('⚠️ Exception during drive asset startup test:', err);
-    isDriveAssetsValid = false;
-    localStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new Event('drive_assets_updated'));
-  }
-
-  return isDriveAssetsValid;
-};
-
-// Automatically trigger startup verification once on script load if window exists
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    verifyDriveAssetsOnStartup();
-  }, 100);
-}
-
-export const setDriveAssetUrls = (urls: Record<string, string>) => {
-  try {
-    const current = getDriveAssetUrls();
-    const updated = { ...current, ...urls };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    hasTestedDriveAssets = true;
-    isDriveAssetsValid = true;
-    window.dispatchEvent(new Event('drive_assets_updated'));
-  } catch (err) {
-    console.error('Failed to save drive asset URLs:', err);
-  }
-};
-
-export const clearDriveAssetUrls = () => {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    hasTestedDriveAssets = true;
-    isDriveAssetsValid = false;
-    window.dispatchEvent(new Event('drive_assets_updated'));
-  } catch (err) {
-    console.error('Failed to clear drive asset URLs:', err);
-  }
+// Public direct image URLs (converted to lh3 CDN viewer format for direct embedding)
+export const PUBLIC_ASSET_URLS: Record<string, string> = {
+  'Gisele_Gante.png': 'https://lh3.googleusercontent.com/d/1lynqDf2CwizUEoE6CvmMcvcN0QTIiBxz',
+  'Igor_Dinho.png': 'https://lh3.googleusercontent.com/d/1x0yz99-9r4xWRlqP7cNinYb8gcYELMwH',
+  'Johny_da_Silva.png': 'https://lh3.googleusercontent.com/d/1WhyKeVVoPxlY1lL47DJ2s5fyaShUFs_n',
+  'Jussara_das_Dores.png': 'https://lh3.googleusercontent.com/d/17EcMDEDsii1flZNF1auXxe59V1M2YZa5',
+  'Silas_Kow.png': 'https://lh3.googleusercontent.com/d/1tzKtwC6IC3d58yKTy2upajem_iSePne5',
+  'Thais_Tudano.png': 'https://lh3.googleusercontent.com/d/14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
+  'Tahis_Tudano.png': 'https://lh3.googleusercontent.com/d/14cFsTb9gxHP-Qk_aEPISBl-XU5_fJzyG',
+  'Tomas_Tigano.png': 'https://lh3.googleusercontent.com/d/1pLz6nxwjG-Kw35X_zp17bPMQ8b-LkAB2',
 };
 
 export const getCanonicalFileName = (input: string): string => {
@@ -169,23 +71,17 @@ export const getCanonicalFileName = (input: string): string => {
 };
 
 export const getAssetUrl = (fileName: keyof DriveAssetMapping | string): string => {
-  if (!fileName) return '/assets/card_info/Johny_da_Silva.png';
+  if (!fileName) return LOCAL_ASSETS['Johny_da_Silva.png'];
 
-  const current = getDriveAssetUrls();
   const canonical = getCanonicalFileName(fileName);
 
-  // 1. Direct match in saved or LOCAL_ASSETS
-  if (current[fileName]) return current[fileName];
+  // 1. Prefer local bundled assets first (100% reliable, zero network latency/errors, works everywhere)
   if (LOCAL_ASSETS[fileName]) return LOCAL_ASSETS[fileName];
-
-  // 2. Match canonical name in saved or LOCAL_ASSETS
-  if (current[canonical]) return current[canonical];
   if (LOCAL_ASSETS[canonical]) return LOCAL_ASSETS[canonical];
 
-  // 3. Fallback to static public path
-  if (canonical.endsWith('.png')) {
-    return `/assets/card_info/${canonical}`;
-  }
+  // 2. Public URLs fallback
+  if (PUBLIC_ASSET_URLS[fileName]) return PUBLIC_ASSET_URLS[fileName];
+  if (PUBLIC_ASSET_URLS[canonical]) return PUBLIC_ASSET_URLS[canonical];
 
-  return '/assets/card_info/Johny_da_Silva.png';
+  return LOCAL_ASSETS['Johny_da_Silva.png'];
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAssetUrl } from '../utils/driveAssetUrls';
+import { getAssetUrl, LOCAL_ASSETS } from '../utils/driveAssetUrls';
 
 interface CardBackProps {
   className?: string;
@@ -7,26 +7,35 @@ interface CardBackProps {
   countLabel?: number | string;
 }
 
+const createFallbackCardBackSvg = () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420">
+    <rect width="300" height="420" rx="16" fill="#020617" stroke="#06b6d4" stroke-width="4"/>
+    <rect x="15" y="15" width="270" height="390" rx="12" fill="#0f172a" stroke="#0891b2" stroke-width="2" stroke-dasharray="6,6"/>
+    <circle cx="150" cy="210" r="70" fill="#06b6d4" opacity="0.1" stroke="#22d3ee" stroke-width="2"/>
+    <text x="150" y="200" font-family="monospace" font-size="20" font-weight="bold" fill="#22d3ee" text-anchor="middle">TI BATTLE</text>
+    <text x="150" y="225" font-family="monospace" font-size="14" font-weight="bold" fill="#06b6d4" text-anchor="middle">GROUND</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
 export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, countLabel }) => {
   const [versoUrl, setVersoUrl] = useState(() => getAssetUrl('verso_da_carta.png'));
-  const [hasErrored, setHasErrored] = useState(false);
 
   useEffect(() => {
     const handleUpdate = () => {
       setVersoUrl(getAssetUrl('verso_da_carta.png'));
-      setHasErrored(false);
     };
     window.addEventListener('drive_assets_updated', handleUpdate);
     return () => window.removeEventListener('drive_assets_updated', handleUpdate);
   }, []);
 
-  const handleImageError = () => {
-    if (!hasErrored) {
-      setHasErrored(true);
-      const publicPath = '/assets/verso_da_carta.png';
-      if (versoUrl !== publicPath) {
-        setVersoUrl(publicPath);
-      }
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.onerror = null;
+    const localUrl = LOCAL_ASSETS['verso_da_carta.png'];
+    if (localUrl && versoUrl !== localUrl) {
+      setVersoUrl(localUrl);
+    } else {
+      setVersoUrl(createFallbackCardBackSvg());
     }
   };
 
