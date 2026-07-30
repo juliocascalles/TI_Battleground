@@ -59,9 +59,10 @@ export const GameBoard: React.FC = () => {
     'Jogo iniciado. Que vença o desenvolvedor mais resiliente!',
   ]);
 
-  // Selected attacker card on player board & Selected hand card
+  // Selected attacker card on player board, Selected hand card & Selected board card
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
+  const [selectedBoardCardId, setSelectedBoardCardId] = useState<string | null>(null);
   const [attackingCardId, setAttackingCardId] = useState<string | null>(null);
   const [attackDirection, setAttackDirection] = useState<'up' | 'down'>('up');
   const [hitCardId, setHitCardId] = useState<string | null>(null);
@@ -142,6 +143,7 @@ export const GameBoard: React.FC = () => {
     setEventHistory([]);
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
+    setSelectedBoardCardId(null);
     setAttackingCardId(null);
     setHitCardId(null);
     setIsAnimating(false);
@@ -217,8 +219,11 @@ export const GameBoard: React.FC = () => {
     setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role}).`]);
   };
 
-  // 2. Select Attacker Card on Board
+  // 2. Select Card on Player Board (Shows attributes panel and enables attack)
   const handleSelectPlayerBoardCard = (card: GameCard) => {
+    setSelectedHandCardId(null);
+    setSelectedBoardCardId(prev => prev === card.instanceId ? null : card.instanceId);
+
     if (currentTurnOwner !== 'player' || isAnimating) return;
     if (!player.canAttackThisTurn) {
       setLogs(prev => [...prev, '⚠️ Você está impedido de atacar neste turno por evento!']);
@@ -337,44 +342,99 @@ export const GameBoard: React.FC = () => {
     // 3. Wait remaining duration of 3 seconds total pause (2200ms) so human player can read screen and see DEMITIDO! stamp
     await new Promise(r => setTimeout(r, 2200));
 
-    // 4. NOW remove fired cards (defense <= 0) from the board after animation finishes!
-    setPlayer(prev => {
-      const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
-      return {
-        ...prev,
-        board: prev.board.filter(c => c.defense > 0),
-        firedCount: prev.firedCount + firedInTurn,
-      };
-    });
+    // 4. NOW remove fired cards (defense <= 0) or send non-fired cards to quarantine if attacker was sick!
+    const isQuarantine = attacker.isSick;
 
-    setComputer(prev => {
-      const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
-      return {
+    if (isQuarantine) {
+      setDeck(prevDeck => {
+        const returned: GameCard[] = [];
+        if (!attackerFired) {
+          returned.push({
+            ...updatedAttacker,
+            defense: updatedAttacker.maxDefense,
+            isSick: false,
+            attackBuff: 0,
+            defenseBuff: 0,
+            isStunned: false,
+            pjBlocked: false,
+          });
+        }
+        if (!defenderFired) {
+          returned.push({
+            ...updatedDefender,
+            defense: updatedDefender.maxDefense,
+            isSick: false,
+            attackBuff: 0,
+            defenseBuff: 0,
+            isStunned: false,
+            pjBlocked: false,
+          });
+        }
+        return [...prevDeck, ...returned];
+      });
+
+      setPlayer(prev => ({
         ...prev,
-        board: prev.board.filter(c => c.defense > 0),
-        firedCount: prev.firedCount + firedInTurn,
-      };
-    });
+        board: prev.board.filter(c => c.defense > 0 && c.instanceId !== attacker.instanceId && c.instanceId !== defender.instanceId),
+        firedCount: prev.firedCount + (prev.board.filter(c => (c.instanceId === attacker.instanceId || c.instanceId === defender.instanceId) && c.defense <= 0).length),
+      }));
+
+      setComputer(prev => ({
+        ...prev,
+        board: prev.board.filter(c => c.defense > 0 && c.instanceId !== attacker.instanceId && c.instanceId !== defender.instanceId),
+        firedCount: prev.firedCount + (prev.board.filter(c => (c.instanceId === attacker.instanceId || c.instanceId === defender.instanceId) && c.defense <= 0).length),
+      }));
+
+      setLogs(prev => [...prev, `😷 QUARENTENA (Epidemia de Gripe)! ${attacker.name} (doente) e ${defender.name} foram enviadas ao baralho.`]);
+    } else {
+      setPlayer(prev => {
+        const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
+        return {
+          ...prev,
+          board: prev.board.filter(c => c.defense > 0),
+          firedCount: prev.firedCount + firedInTurn,
+        };
+      });
+
+      setComputer(prev => {
+        const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
+        return {
+          ...prev,
+          board: prev.board.filter(c => c.defense > 0),
+          firedCount: prev.firedCount + firedInTurn,
+        };
+      });
+    }
 
     setSelectedAttackerId(null);
   };
 
-  // 3. Attack Enemy Card on Computer Board (Human Player)
+  // 3. Attack or Select Enemy Card on Computer Board
   const handleAttackEnemyCard = async (defender: GameCard) => {
-    if (currentTurnOwner !== 'player' || !selectedAttackerId || isAnimating) return;
+    setSelectedHandCardId(null);
 
-    const attacker = player.board.find(c => c.instanceId === selectedAttackerId);
-    if (!attacker) return;
+    // If player has a selected attacker, run attack
+    if (currentTurnOwner === 'player' && selectedAttackerId && !isAnimating) {
+      const attacker = player.board.find(c => c.instanceId === selectedAttackerId);
+      if (attacker) {
+        // Validate Priority rule
+        if (!isValidAttackTarget(defender, computer.board)) {
+          setLogs(prev => [...prev, '🎯 REGRA DE PRIORIDADE: Você é obrigado a atacar a carta inimiga com Prioridade primeiro!']);
+          setSelectedBoardCardId(defender.instanceId);
+          return;
+        }
 
-    // Validate Priority rule
-    if (!isValidAttackTarget(defender, computer.board)) {
-      setLogs(prev => [...prev, '🎯 REGRA DE PRIORIDADE: Você é obrigado a atacar a carta inimiga com Prioridade primeiro!']);
-      return;
+        setSelectedBoardCardId(defender.instanceId);
+        setIsAnimating(true);
+        await runAttackSequence(attacker, defender, 'up');
+        setIsAnimating(false);
+        setSelectedBoardCardId(null);
+        return;
+      }
     }
 
-    setIsAnimating(true);
-    await runAttackSequence(attacker, defender, 'up');
-    setIsAnimating(false);
+    // Otherwise, toggle selection of enemy card on computer board to inspect attributes
+    setSelectedBoardCardId(prev => prev === defender.instanceId ? null : defender.instanceId);
   };
 
   // --- END PLAYER TURN & TRIGGER AI TURN ---
@@ -383,14 +443,27 @@ export const GameBoard: React.FC = () => {
 
     setIsAnimating(true);
 
-    // Reset player attack counters and temporary blocks
-    const resetPlayerBoard = player.board.map(c => ({
-      ...c,
-      hasAttackedThisTurn: 0,
-      pjBlocked: false,
-    }));
+    // Reset player attack counters and tick card status durations
+    const resetPlayerBoard = player.board.map(c => {
+      const stunnedRounds = Math.max(0, (c.stunnedRounds !== undefined ? c.stunnedRounds : c.isStunned ? 1 : 0) - 1);
+      const pjBlockedRounds = Math.max(0, (c.pjBlockedRounds !== undefined ? c.pjBlockedRounds : c.pjBlocked ? 1 : 0) - 1);
+      const pregnantRounds = Math.max(0, (c.pregnantRounds !== undefined ? c.pregnantRounds : c.isPregnant ? 1 : 0) - 1);
+
+      return {
+        ...c,
+        hasAttackedThisTurn: 0,
+        stunnedRounds,
+        isStunned: stunnedRounds > 0,
+        pjBlockedRounds,
+        pjBlocked: pjBlockedRounds > 0,
+        pregnantRounds,
+        isPregnant: pregnantRounds > 0,
+      };
+    });
 
     setSelectedAttackerId(null);
+    setSelectedHandCardId(null);
+    setSelectedBoardCardId(null);
 
     // 1. Event Check
     let updatedP = { ...player, board: resetPlayerBoard };
@@ -399,16 +472,31 @@ export const GameBoard: React.FC = () => {
     const eventTriggers = checkShouldTriggerEvent(turnsSinceLastEvent);
     if (eventTriggers) {
       soundFx.eventAlertSound();
-      const outcome = triggerRandomEvent(turnNumber, updatedP, updatedC);
+      const outcome = triggerRandomEvent(turnNumber, updatedP, updatedC, deck);
       setActiveEvent(outcome.event);
       setEventHistory(prev => [...prev, outcome.event]);
       updatedP = outcome.updatedPlayer;
       updatedC = outcome.updatedComputer;
+      if (outcome.updatedDeck) {
+        setDeck(outcome.updatedDeck);
+      }
       setTurnsSinceLastEvent(0);
       setLogs(prev => [...prev, outcome.logMessage]);
 
       // Pause for 3s event animation duration
       await new Promise(r => setTimeout(r, 3000));
+
+      // Filter out fired cards (defense <= 0) resulting from events like Layoff
+      const pFired = updatedP.board.filter(c => c.defense <= 0);
+      if (pFired.length > 0) {
+        updatedP.firedCount += pFired.length;
+        updatedP.board = updatedP.board.filter(c => c.defense > 0);
+      }
+      const cFired = updatedC.board.filter(c => c.defense <= 0);
+      if (cFired.length > 0) {
+        updatedC.firedCount += cFired.length;
+        updatedC.board = updatedC.board.filter(c => c.defense > 0);
+      }
     } else {
       setTurnsSinceLastEvent(prev => prev + 1);
     }
@@ -571,7 +659,22 @@ export const GameBoard: React.FC = () => {
         canPlayCardsThisTurn: true,
         drawBlockedRounds: drawBlocked,
         extraCoffeeCostRounds: Math.max(0, prevP.extraCoffeeCostRounds - 1),
-        board: prevP.board.map(c => ({ ...c, hasAttackedThisTurn: 0, pjBlocked: false })),
+        board: prevP.board.map(c => {
+          const stunnedRounds = Math.max(0, (c.stunnedRounds !== undefined ? c.stunnedRounds : c.isStunned ? 1 : 0) - 1);
+          const pjBlockedRounds = Math.max(0, (c.pjBlockedRounds !== undefined ? c.pjBlockedRounds : c.pjBlocked ? 1 : 0) - 1);
+          const pregnantRounds = Math.max(0, (c.pregnantRounds !== undefined ? c.pregnantRounds : c.isPregnant ? 1 : 0) - 1);
+
+          return {
+            ...c,
+            hasAttackedThisTurn: 0,
+            stunnedRounds,
+            isStunned: stunnedRounds > 0,
+            pjBlockedRounds,
+            pjBlocked: pjBlockedRounds > 0,
+            pregnantRounds,
+            isPregnant: pregnantRounds > 0,
+          };
+        }),
       };
     });
 
@@ -594,6 +697,9 @@ export const GameBoard: React.FC = () => {
             <h1 className="font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-300 to-yellow-400 text-base sm:text-lg tracking-wider">
               TI BATTLEGROUND
             </h1>
+            <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300/80 bg-slate-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+              v1.2026.07.30
+            </span>
           </div>
           <span className="hidden sm:inline text-xs font-mono text-slate-400">
             Rodada #{turnNumber}
@@ -699,6 +805,7 @@ export const GameBoard: React.FC = () => {
                     <div key={card.instanceId} className="w-32 sm:w-40">
                       <CardView
                         card={card}
+                        isSelected={selectedBoardCardId === card.instanceId}
                         isValidTarget={isValidTarget}
                         isAttacking={attackingCardId === card.instanceId}
                         attackDirection={attackDirection}
@@ -756,34 +863,49 @@ export const GameBoard: React.FC = () => {
           </div>
         </div>
 
-        {/* 3.5 UNBOUGHT CARD SELECTION PANEL (STATUSBAR & BUY BUTTON LADO-A-LADO) */}
+        {/* 3.5 CARD SELECTION STATUS PANEL (HAND CARD WITH BUY BUTTON, OR BOARD CARD WITHOUT BUY BUTTON) */}
         {(() => {
           const selectedHandCard = player.hand.find(c => c.instanceId === selectedHandCardId) || null;
-          if (!selectedHandCard) return null;
+          const selectedBoardCard = selectedBoardCardId
+            ? (player.board.find(c => c.instanceId === selectedBoardCardId) || computer.board.find(c => c.instanceId === selectedBoardCardId) || null)
+            : (selectedAttackerId ? player.board.find(c => c.instanceId === selectedAttackerId) || null : null);
 
-          const actualCost = getActualCardCost(selectedHandCard, player);
-          const canAfford = player.coffee >= actualCost;
-          const isMyTurn = currentTurnOwner === 'player';
-          const handIndex = player.hand.findIndex(c => c.instanceId === selectedHandCard.instanceId);
-          const canBuy = canAfford && isMyTurn && !isAnimating && handIndex !== -1 && player.board.length < 5;
+          const cardToShow = selectedHandCard || selectedBoardCard;
+          if (!cardToShow) return null;
+
+          const isHandCard = selectedHandCard !== null;
+          const isPlayerCard = cardToShow.owner === 'player';
+          const cardOwnerLabel = isHandCard ? 'Na Mão' : isPlayerCard ? 'Sua Carta (Mesa)' : 'Inimigo (Computador)';
+          const actualCost = getActualCardCost(cardToShow, isPlayerCard ? player : computer);
 
           return (
-            <div className="bg-slate-900 border-2 border-cyan-400 p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
-              {/* 2.1 - STATUSBAR COM RESUMO DE MODIFICADORES E CONTRATO PJ */}
+            <div className={`bg-slate-900 border-2 ${
+              isHandCard ? 'border-cyan-400' : isPlayerCard ? 'border-emerald-400' : 'border-rose-400'
+            } p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in`}>
+              {/* STATUSBAR COM RESUMO DE ATRIBUTOS, MODIFICADORES E CONTRATO PJ */}
               <div className="flex-1 flex flex-col gap-1 text-xs text-left w-full">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-black text-white text-sm">{selectedHandCard.name}</span>
-                  <span className="text-cyan-400 font-semibold text-xs">({selectedHandCard.role})</span>
-                  <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 font-mono text-[11px] text-slate-200">
-                    ⚔️ A: {selectedHandCard.attack + selectedHandCard.attackBuff} | 🛡️ D: {selectedHandCard.defense} | ☕ Custo: {actualCost}
+                  <span className="font-black text-white text-sm">{cardToShow.name}</span>
+                  <span className="text-cyan-400 font-semibold text-xs">({cardToShow.role})</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    isHandCard 
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-600/60' 
+                      : isPlayerCard 
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/60' 
+                      : 'bg-rose-950 text-rose-300 border border-rose-600/60'
+                  }`}>
+                    {cardOwnerLabel}
                   </span>
-                  {selectedHandCard.isPJ ? (
+                  <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 font-mono text-[11px] text-slate-200">
+                    ⚔️ Ataque: {cardToShow.attack + cardToShow.attackBuff} | 🛡️ Defesa: {cardToShow.defense} | ☕ Custo: {actualCost}
+                  </span>
+                  {cardToShow.isPJ ? (
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
-                      selectedHandCard.pjBlocked 
+                      cardToShow.pjBlocked 
                         ? 'bg-red-950 text-red-300 border-red-500/80' 
                         : 'bg-amber-950 text-amber-300 border-amber-500/80'
                     }`}>
-                      {selectedHandCard.pjBlocked ? '📄 PJ BLOQUEADO (Baixa Demanda)' : '📄 CONTRATO PJ (Sem Direitos CLT)'}
+                      {cardToShow.pjBlocked ? '📄 PJ BLOQUEADO (Baixa Demanda)' : '📄 CONTRATO PJ (Sem Direitos CLT)'}
                     </span>
                   ) : (
                     <span className="text-[10px] font-black px-2 py-0.5 rounded border bg-emerald-950 text-emerald-300 border-emerald-500/80">
@@ -792,66 +914,82 @@ export const GameBoard: React.FC = () => {
                   )}
                 </div>
 
-                {/* MODIFICADORES DA CARTA */}
+                {/* MODIFICADORES E STATUS DA CARTA */}
                 <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
-                  <span className="text-slate-400 font-medium">Modificadores:</span>
-                  {selectedHandCard.hasProtection && (
+                  <span className="text-slate-400 font-medium">Status:</span>
+                  {cardToShow.defense > 0 && !cardToShow.isStunned && !cardToShow.pjBlocked ? (
+                    <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" /> Ativa
+                    </span>
+                  ) : (
+                    <span className="text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/50 flex items-center gap-1 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-400" /> Inativa
+                    </span>
+                  )}
+                  {cardToShow.hasProtection && (
                     <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
                       <Shield className="w-3 h-3 text-emerald-400" /> Proteção (Anula próximo dano)
                     </span>
                   )}
-                  {selectedHandCard.modifiers.includes('buff') && (
+                  {cardToShow.modifiers.includes('buff') && (
                     <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
-                      <Zap className="w-3 h-3 text-amber-400" /> Buff (+1/+1)
+                      <Zap className="w-3 h-3 text-amber-400" /> Buff (+{cardToShow.buffAttackValue ?? 1}/+{cardToShow.buffDefenseValue ?? 1})
                     </span>
                   )}
-                  {selectedHandCard.modifiers.includes('ataque_duplo') && (
+                  {cardToShow.modifiers.includes('ataque_duplo') && (
                     <span className="text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/50 flex items-center gap-1 font-semibold">
                       <Swords className="w-3 h-3 text-rose-400" /> Ataque Duplo (2x/turno)
                     </span>
                   )}
-                  {selectedHandCard.modifiers.includes('prioridade') && (
+                  {cardToShow.modifiers.includes('prioridade') && (
                     <span className="text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-500/50 flex items-center gap-1 font-semibold">
                       <Target className="w-3 h-3 text-purple-300" /> Prioridade (Taunt)
                     </span>
                   )}
-                  {selectedHandCard.isStunned && (
+                  {cardToShow.isStunned && (
                     <span className="text-yellow-300 bg-yellow-950/80 px-2 py-0.5 rounded border border-yellow-500/50 flex items-center gap-1 font-semibold">
                       <Lock className="w-3 h-3 text-yellow-400" /> Atordoado
                     </span>
                   )}
-                  {!selectedHandCard.isPJ && !selectedHandCard.hasProtection && !selectedHandCard.modifiers.length && !selectedHandCard.isStunned && (
-                    <span className="text-slate-400 italic">Nenhum modificador ativo (Contrato Padrão)</span>
-                  )}
                 </div>
               </div>
 
-              {/* 2.2 - BOTÃO COMPRAR */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (canBuy && handIndex !== -1) {
-                    handlePlayCardFromHand(selectedHandCard, handIndex);
-                  }
-                }}
-                disabled={!canBuy}
-                className={`shrink-0 py-2.5 px-5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
-                  canBuy
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/40 active:scale-95 ring-2 ring-emerald-400/50'
-                    : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                }`}
-              >
-                <ShoppingCart className="w-4 h-4" />
-                {canBuy
-                  ? `Comprar / Contratar (-${actualCost} ☕)`
-                  : !canAfford
-                  ? `Café Insuficiente (${player.coffee}/${actualCost} ☕)`
-                  : !isMyTurn
-                  ? 'Aguarde seu Turno'
-                  : player.board.length >= 5
-                  ? 'Mesa Cheia (Máx 5)'
-                  : 'Indisponível'}
-              </button>
+              {/* BOTÃO COMPRAR - APENAS SE FOR CARTA DA MÃO */}
+              {isHandCard && (() => {
+                const canAfford = player.coffee >= actualCost;
+                const isMyTurn = currentTurnOwner === 'player';
+                const handIndex = player.hand.findIndex(c => c.instanceId === cardToShow.instanceId);
+                const canBuy = canAfford && isMyTurn && !isAnimating && handIndex !== -1 && player.board.length < 5;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canBuy && handIndex !== -1) {
+                        handlePlayCardFromHand(cardToShow, handIndex);
+                        setSelectedHandCardId(null);
+                      }
+                    }}
+                    disabled={!canBuy}
+                    className={`shrink-0 py-2.5 px-5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
+                      canBuy
+                        ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/40 active:scale-95 ring-2 ring-emerald-400/50'
+                        : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                    }`}
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    {canBuy
+                      ? `Comprar / Contratar (-${actualCost} ☕)`
+                      : !canAfford
+                      ? `Café Insuficiente (${player.coffee}/${actualCost} ☕)`
+                      : !isMyTurn
+                      ? 'Aguarde seu Turno'
+                      : player.board.length >= 5
+                      ? 'Mesa Cheia (Máx 5)'
+                      : 'Indisponível'}
+                  </button>
+                );
+              })()}
             </div>
           );
         })()}
@@ -867,7 +1005,7 @@ export const GameBoard: React.FC = () => {
               </div>
             ) : (
               player.board.map((card) => {
-                const isSelected = selectedAttackerId === card.instanceId;
+                const isSelected = selectedAttackerId === card.instanceId || selectedBoardCardId === card.instanceId;
                 const isAffected = isCardAffectedByEvent(card, activeEvent, 'player');
                 return (
                   <div key={card.instanceId} className="w-32 sm:w-40">

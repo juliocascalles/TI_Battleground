@@ -1,34 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { getAssetUrl, DriveAssetMapping } from '../utils/driveAssetUrls';
+import { getAssetUrl, getCanonicalFileName } from '../utils/driveAssetUrls';
 
 interface CardSvgAvatarProps {
   avatarId: string;
 }
 
-const avatarFileNameMap: Record<string, keyof DriveAssetMapping> = {
-  johny: 'Johny_da_Silva.png',
-  thais: 'Thais_Tudano.png',
-  igor: 'Igor_Dinho.png',
-  gisele: 'Gisele_Gante.png',
-};
-
 export const CardSvgAvatar: React.FC<CardSvgAvatarProps> = ({ avatarId }) => {
-  const fileName = avatarFileNameMap[avatarId] || 'Johny_da_Silva.png';
-  const [imgSrc, setImgSrc] = useState(() => getAssetUrl(fileName));
+  const [imgSrc, setImgSrc] = useState(() => getAssetUrl(avatarId));
 
   useEffect(() => {
-    setImgSrc(getAssetUrl(fileName));
+    setImgSrc(getAssetUrl(avatarId));
+
     const handleUpdate = () => {
-      setImgSrc(getAssetUrl(fileName));
+      setImgSrc(getAssetUrl(avatarId));
     };
+
     window.addEventListener('drive_assets_updated', handleUpdate);
     return () => window.removeEventListener('drive_assets_updated', handleUpdate);
-  }, [fileName]);
+  }, [avatarId]);
+
+  const handleImageError = () => {
+    const canonical = getCanonicalFileName(avatarId);
+    const targetPublicPath = `/assets/card_info/${canonical}`;
+    const defaultFallback = '/assets/card_info/Johny_da_Silva.png';
+
+    if (imgSrc !== targetPublicPath) {
+      setImgSrc(targetPublicPath);
+    } else if (imgSrc !== defaultFallback) {
+      setImgSrc(defaultFallback);
+    }
+  };
 
   return (
     <img
       src={imgSrc}
       alt={avatarId}
+      onError={handleImageError}
       className="w-full h-full object-cover select-none pointer-events-none"
       draggable={false}
     />

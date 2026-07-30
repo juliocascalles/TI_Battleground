@@ -6,8 +6,8 @@
   "custo": {
     "shape": "circle",
     "bbox": [
-      4,
-      4,
+      12,
+       9,
       120,
       118
     ]
@@ -15,28 +15,28 @@
   "ataque": {
     "shape": "circle",
     "bbox": [
-      4,
-      340,
-      120,
-      452
+       95,
+      300,
+      203,
+      408
     ]
   },
   "defesa": {
     "shape": "circle",
     "bbox": [
-      652,
-      340,
-      764,
-      452
+      636,
+      300,
+      744,
+      408
     ]
   },
   "modifiers_row": {
     "shape": "rect",
     "bbox": [
       230,
-      6,
+       60,
       537,
-      40
+       40
     ]
   },
   "contrato_pj_tag": {

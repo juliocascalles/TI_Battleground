@@ -1,4 +1,4 @@
-export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade';
+export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade' | 'enfraquecer';
 
 export type CharacterGender = 'M' | 'F';
 
@@ -31,7 +31,12 @@ export interface GameCard {
   hasProtection: boolean; // Lost after absorbing 1 hit
   hasAttackedThisTurn: number; // Max allowed depends on ataque_duplo (1 or 2)
   isStunned: boolean; // From events
+  stunnedRounds?: number;
   pjBlocked: boolean; // From Baixa Demanda event
+  pjBlockedRounds?: number;
+  isPregnant?: boolean; // From Gravidez event
+  pregnantRounds?: number;
+  isSick?: boolean; // From Epidemia de Gripe event
   avatarSvg: string;
   quote: string;
   owner: 'player' | 'computer';
@@ -39,6 +44,11 @@ export interface GameCard {
   // Temporary buff modifiers
   attackBuff: number;
   defenseBuff: number;
+
+  // Custom variable modifier stats
+  buffAttackValue?: number; // 0 to 3
+  buffDefenseValue?: number; // 0 to 3
+  weakenPower?: number; // Power of enfraquecer attribute (1 to 3)
 }
 
 export type EventType =

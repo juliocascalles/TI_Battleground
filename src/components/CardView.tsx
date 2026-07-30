@@ -32,6 +32,7 @@ export const CardView: React.FC<CardViewProps> = ({
 }) => {
   const displayCost = actualCost !== undefined ? actualCost : card.cost;
   const isFired = card.defense <= 0;
+  const isActive = card.defense > 0 && !card.isStunned && !card.pjBlocked && !card.isPregnant;
   const totalAttack = card.attack + card.attackBuff;
   const totalDefense = Math.max(0, card.defense + card.defenseBuff);
 
@@ -72,51 +73,51 @@ export const CardView: React.FC<CardViewProps> = ({
           </filter>
         </defs>
 
-        {/* 1. ZONE CUSTO (Coffee Cost): circle bbox [4, 4, 120, 118] -> center (62, 61) */}
+        {/* 1. ZONE CUSTO (Coffee Cost): font size 53 (+3px) */}
         <g id="zone-custo" data-zone="zone-custo">
           <text
-            x="62"
-            y="61"
+            x="72"
+            y="71"
             textAnchor="middle"
             dominantBaseline="central"
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="900"
-            fontSize="48"
-            fill="#ffffff"
+            fontSize="75"
+            fill="#000000"
             filter="url(#textGlow)"
           >
             {displayCost}
           </text>
         </g>
 
-        {/* 2. ZONE ATAQUE: circle bbox [4, 340, 120, 452] -> center (62, 396) */}
+        {/* 2. ZONE ATAQUE: aligned with custo on the left (x=72, y=444) */}
         <g id="zone-ataque" data-zone="zone-ataque">
           <text
-            x="62"
-            y="396"
+            x="72"
+            y="444"
             textAnchor="middle"
             dominantBaseline="central"
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="900"
-            fontSize="48"
-            fill="#ffffff"
+            fontSize="75"
+            fill="#000000"
             filter="url(#textGlow)"
           >
             {totalAttack}
           </text>
         </g>
 
-        {/* 3. ZONE DEFESA: circle bbox [652, 340, 764, 452] -> center (708, 396) */}
+        {/* 3. ZONE DEFESA: 20% right, 20% up (x=690, y=444) */}
         <g id="zone-defesa" data-zone="zone-defesa">
           <text
-            x="708"
-            y="396"
+            x="690"
+            y="444"
             textAnchor="middle"
             dominantBaseline="central"
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="900"
-            fontSize="48"
-            fill={card.defense < card.maxDefense ? '#facc15' : '#ffffff'}
+            fontSize="75"
+            fill={card.defense < card.maxDefense ? '#cc0015' : '#000000'}
             filter="url(#textGlow)"
           >
             {totalDefense}
@@ -153,7 +154,7 @@ export const CardView: React.FC<CardViewProps> = ({
         )}
 
         {/* 5. ZONE MODIFIERS ROW: rect bbox [230, 6, 537, 40] -> [x: 230, y: 6, w: 307, h: 34] */}
-        <foreignObject x="230" y="6" width="307" height="34">
+        <foreignObject x="230" y="100" width="307" height="34">
           <div className="w-full h-full flex items-center justify-center gap-1.5 px-1">
             {card.hasProtection && (
               <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-300 bg-emerald-950/90 px-2 py-0.5 rounded border border-emerald-500/70 shadow-sm">
@@ -162,7 +163,12 @@ export const CardView: React.FC<CardViewProps> = ({
             )}
             {card.modifiers.includes('buff') && (
               <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-300 bg-amber-950/90 px-2 py-0.5 rounded border border-amber-500/70 shadow-sm">
-                <Zap className="w-3.5 h-3.5 text-amber-400" /> Buff
+                <Zap className="w-3.5 h-3.5 text-amber-400" /> Buff (+{card.buffAttackValue ?? 1}/+{card.buffDefenseValue ?? 1})
+              </span>
+            )}
+            {card.modifiers.includes('enfraquecer') && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-black text-cyan-300 bg-cyan-950/90 px-2 py-0.5 rounded border border-cyan-500/70 shadow-sm">
+                📉 Enfraq (-{card.weakenPower ?? 1})
               </span>
             )}
             {card.modifiers.includes('ataque_duplo') && (
@@ -177,6 +183,38 @@ export const CardView: React.FC<CardViewProps> = ({
             )}
           </div>
         </foreignObject>
+
+        {/* 6. ZONE STATUS CIRCLE (TOP-RIGHT): center (708, 61), radius 52 */}
+        <g id="zone-status-circle" data-zone="zone-status-circle">
+          <circle
+            cx="708"
+            cy="61"
+            r="52"
+            fill={isActive ? '#15803d' : '#b91c1c'}
+            stroke={isActive ? '#4ade80' : '#fca5a5'}
+            strokeWidth="6"
+            filter="url(#textGlow)"
+          />
+          <circle
+            cx="708"
+            cy="61"
+            r="38"
+            fill={isActive ? '#16a34a' : '#dc2626'}
+          />
+          <text
+            x="708"
+            y="61"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily="system-ui, -apple-system, sans-serif"
+            fontWeight="900"
+            fontSize="36"
+            fill="#000000"
+            filter="url(#textGlow)"
+          >
+            {isActive ? '✓' : '✕'}
+          </text>
+        </g>
       </svg>
 
       {/* SMOKE / EXPLOSION IMPACT OVERLAY */}
@@ -207,11 +245,29 @@ export const CardView: React.FC<CardViewProps> = ({
         </div>
       )}
 
+      {/* PREGNANT OVERLAY */}
+      {card.isPregnant && !isFired && (
+        <div className="absolute inset-0 bg-pink-950/75 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none">
+          <div className="flex items-center gap-1.5 bg-pink-500/90 text-slate-950 px-3 py-1 rounded-md font-bold text-xs shadow-lg">
+            🤰 MATERNIDADE ({card.pregnantRounds || 3}R)
+          </div>
+        </div>
+      )}
+
+      {/* SICK OVERLAY BADGE */}
+      {card.isSick && !isFired && !card.isPregnant && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-25 pointer-events-none">
+          <div className="flex items-center gap-1 bg-emerald-600/95 text-white px-2 py-0.5 rounded font-bold text-[10px] shadow-lg border border-emerald-300 whitespace-nowrap">
+            🤧 DOENTE (QUARENTENA)
+          </div>
+        </div>
+      )}
+
       {/* STUNNED / BLOCKED OVERLAY */}
-      {card.isStunned && !isFired && (
+      {card.isStunned && !card.isPregnant && !isFired && (
         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none">
           <div className="flex items-center gap-1.5 bg-yellow-500/90 text-slate-950 px-3 py-1 rounded-md font-bold text-xs">
-            <Lock className="w-4 h-4" /> ATORDOADO
+            <Lock className="w-4 h-4" /> ATORDOADO (INATIVO)
           </div>
         </div>
       )}

@@ -68,6 +68,12 @@ export function resolveCombat(
     updatedDefender.defense -= damageToDefender;
   }
 
+  // 1b. Apply Enfraquecer from Attacker to Defender
+  if (attacker.modifiers.includes('enfraquecer')) {
+    const weakenVal = attacker.weakenPower ?? 1;
+    updatedDefender.attack = Math.max(0, updatedDefender.attack - weakenVal);
+  }
+
   // 2. Defender counter-strikes Attacker (troca de dano)
   if (updatedAttacker.hasProtection) {
     attackerBlockedByProtection = true;
@@ -76,6 +82,12 @@ export function resolveCombat(
   } else {
     damageToAttacker = defPower;
     updatedAttacker.defense -= damageToAttacker;
+  }
+
+  // 2b. Apply Enfraquecer from Defender to Attacker if Defender has it
+  if (defender.modifiers.includes('enfraquecer')) {
+    const weakenVal = defender.weakenPower ?? 1;
+    updatedAttacker.attack = Math.max(0, updatedAttacker.attack - weakenVal);
   }
 
   updatedAttacker.hasAttackedThisTurn += 1;
@@ -98,19 +110,22 @@ export function resolveCombat(
 
 /**
  * Applies Buff effect when a card with 'buff' modifier is played onto the board.
- * Increases Attack +1 and Defense +1 to all ally cards currently on the board.
+ * Increases Attack (+0..3) and Defense (+0..3) to all ally cards currently on the board.
  */
 export function applyPlayBuff(playedCard: GameCard, allyBoard: GameCard[]): GameCard[] {
   if (!playedCard.modifiers.includes('buff')) {
     return allyBoard;
   }
 
+  const atkAdd = playedCard.buffAttackValue ?? 1;
+  const defAdd = playedCard.buffDefenseValue ?? 1;
+
   return allyBoard.map(card => ({
     ...card,
-    attackBuff: card.attackBuff + 1,
-    defenseBuff: card.defenseBuff + 1,
-    defense: card.defense + 1,
-    maxDefense: card.maxDefense + 1,
+    attackBuff: card.attackBuff + atkAdd,
+    defenseBuff: card.defenseBuff + defAdd,
+    defense: card.defense + defAdd,
+    maxDefense: card.maxDefense + defAdd,
   }));
 }
 
@@ -118,6 +133,6 @@ export function applyPlayBuff(playedCard: GameCard, allyBoard: GameCard[]): Game
  * Calculates current actual coffee cost to play a card, factoring in event penalties.
  */
 export function getActualCardCost(card: GameCard, player: PlayerState): number {
-  const extraCost = player.extraCoffeeCostRounds > 0 ? 1 : 0;
+  const extraCost = (player.extraCoffeeCostRounds > 0 && card.gender === 'M') ? 1 : 0;
   return Math.max(1, card.cost + extraCost);
 }

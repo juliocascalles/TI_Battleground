@@ -8,7 +8,7 @@ import {
   SyncProgress,
   DriveFileInfo
 } from '../services/authAndDrive';
-import { getDriveAssetUrls, LOCAL_ASSETS } from '../utils/driveAssetUrls';
+import { getDriveAssetUrls, clearDriveAssetUrls, LOCAL_ASSETS } from '../utils/driveAssetUrls';
 import { HardDrive, CloudUpload, CheckCircle, AlertCircle, LogOut, ExternalLink, RefreshCw, X, Shield } from 'lucide-react';
 
 interface GoogleDriveModalProps {
@@ -260,7 +260,15 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({ isOpen, onCl
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
             <span>Mapeamento de URLs dos Arquivos ({Object.keys(LOCAL_ASSETS).length})</span>
-            <span className="text-[10px] text-slate-500">Google Drive & Fallbacks</span>
+            <button
+              onClick={() => {
+                clearDriveAssetUrls();
+                setSuccessMsg('URLs redefinidas para os ativos locais padrão!');
+              }}
+              className="text-[10px] text-cyan-400 hover:text-cyan-300 underline font-normal transition-colors"
+            >
+              Restaurar Ativos Locais
+            </button>
           </h3>
 
           <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">

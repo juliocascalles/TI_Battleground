@@ -18,6 +18,13 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
     return () => window.removeEventListener('drive_assets_updated', handleUpdate);
   }, []);
 
+  const handleImageError = () => {
+    const publicPath = '/assets/verso_da_carta.png';
+    if (versoUrl !== publicPath) {
+      setVersoUrl(publicPath);
+    }
+  };
+
   return (
     <div
       onClick={onClick}
@@ -27,6 +34,7 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
         <img
           src={versoUrl}
           alt="Verso da Carta"
+          onError={handleImageError}
           className="w-[150%] h-[150%] max-w-none object-cover select-none pointer-events-none -rotate-90 origin-center"
           draggable={false}
         />

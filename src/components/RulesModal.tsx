@@ -67,8 +67,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2">
                 <Zap className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-amber-400 block text-xs">Buff de Ataque/Defesa</strong>
-                  <span className="text-xs text-slate-300">Aumenta atributos de colegas de equipe quando jogado.</span>
+                  <strong className="text-amber-400 block text-xs">Buff de Ataque/Defesa (+0..3)</strong>
+                  <span className="text-xs text-slate-300">Aumenta atributos de colegas (+1/+1, +2/+0, +1/+3...).</span>
                 </div>
               </div>
 
@@ -87,6 +87,14 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                   <span className="text-xs text-slate-300">Inimigos são OBRIGADOS a atacar esta carta primeiro.</span>
                 </div>
               </div>
+
+              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2 col-span-1 sm:col-span-2">
+                <span className="text-lg shrink-0 mt-0.5">📉</span>
+                <div>
+                  <strong className="text-cyan-400 block text-xs">Enfraquecer</strong>
+                  <span className="text-xs text-slate-300">Ao atacar um inimigo, reduz os pontos de ataque dele pelo poder de enfraquecer da carta.</span>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -102,7 +110,10 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🐛 Bug em Produção</span>
               <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🚆 Problema nos Trens</span>
               <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🏠 Enchente</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">📉 Baixa Demanda</span>
+              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🍼 Virou papai! (Machos)</span>
+              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🤧 Epidemia de Gripe</span>
+              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🤰 Licença Maternidade (Fem)</span>
+              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">📉 Baixa Demanda (PJ)</span>
             </div>
           </section>
         </div>

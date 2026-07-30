@@ -16,15 +16,17 @@ export interface EventOutcome {
   event: GlobalEvent;
   updatedPlayer: PlayerState;
   updatedComputer: PlayerState;
+  updatedDeck?: GameCard[];
   logMessage: string;
 }
 
 /**
  * Calculates if an event triggers this turn.
- * Probability grows each turn without an event: starts at 15%, +10% per eventless turn.
+ * Probability grows each turn without an event: starts at 15%, +10% per eventless turn, increased by 50%.
  */
 export function checkShouldTriggerEvent(turnsSinceLastEvent: number): boolean {
-  const probability = Math.min(0.85, 0.15 + turnsSinceLastEvent * 0.1);
+  const baseProb = 0.15 + turnsSinceLastEvent * 0.1;
+  const probability = Math.min(0.95, baseProb * 1.5);
   return Math.random() < probability;
 }
 
@@ -34,24 +36,41 @@ export function checkShouldTriggerEvent(turnsSinceLastEvent: number): boolean {
 export function triggerRandomEvent(
   currentTurn: number,
   player: PlayerState,
-  computer: PlayerState
+  computer: PlayerState,
+  deck: GameCard[] = []
 ): EventOutcome {
-  const targetPlayerId: 'player' | 'computer' | 'both' = Math.random() < 0.5 ? 'player' : 'computer';
-  
-  // Pick candidate event types
+  let updatedPlayer = JSON.parse(JSON.stringify(player)) as PlayerState;
+  let updatedComputer = JSON.parse(JSON.stringify(computer)) as PlayerState;
+  let updatedDeck = [...deck];
+
   let candidateTypes = [...ALL_EVENT_TYPES];
 
-  // Check condition for 'gravidez': target must have a female character on board
-  const targetState = targetPlayerId === 'player' ? player : computer;
-  const hasFemaleOnBoard = targetState.board.some(c => c.gender === 'F');
-  if (!hasFemaleOnBoard) {
+  // Helper lists of characters in play (board + hand)
+  const allMaleInPlay = [
+    ...updatedPlayer.board, ...updatedPlayer.hand,
+    ...updatedComputer.board, ...updatedComputer.hand
+  ].filter(c => c.gender === 'M');
+
+  const allFemaleInPlay = [
+    ...updatedPlayer.board, ...updatedPlayer.hand,
+    ...updatedComputer.board, ...updatedComputer.hand
+  ].filter(c => c.gender === 'F');
+
+  // Candidate condition filters
+  if (allMaleInPlay.length === 0) {
+    candidateTypes = candidateTypes.filter(t => t !== 'pai_recem_nascido');
+  }
+
+  if (allFemaleInPlay.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'gravidez');
   }
 
-  const selectedType = candidateTypes[Math.floor(Math.random() * candidateTypes.length)];
+  if (updatedPlayer.board.length === 0) {
+    candidateTypes = candidateTypes.filter(t => t !== 'gripe');
+  }
 
-  let updatedPlayer = JSON.parse(JSON.stringify(player)) as PlayerState;
-  let updatedComputer = JSON.parse(JSON.stringify(computer)) as PlayerState;
+  const selectedType = candidateTypes[Math.floor(Math.random() * candidateTypes.length)];
+  const targetPlayerId: 'player' | 'computer' | 'both' = Math.random() < 0.5 ? 'player' : 'computer';
 
   let title = '';
   let description = '';
@@ -62,7 +81,7 @@ export function triggerRandomEvent(
   switch (selectedType) {
     case 'layoff': {
       title = '🚨 EVENTO: LAYOFF EM MASSA!';
-      description = 'Corte de gastos da diretoria! Todas as cartas no campo de ambos os jogadores sofrem 2 de dano.';
+      description = 'Corte de gastos da diretoria! Todas as cartas de todos os jogadores sofrem 2 pontos de dano e reavalia demissão.';
       logMessage = `[${timestamp}] CRITICAL: LAYOFF DETECTADO! 2 pts de dano em todas as cartas da mesa.`;
 
       updatedPlayer.board = updatedPlayer.board.map(c => ({ ...c, defense: c.defense - 2 }));
@@ -71,96 +90,199 @@ export function triggerRandomEvent(
     }
 
     case 'bug_producao': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
       title = '🐛 EVENTO: BUG EM PRODUÇÃO!';
-      description = `Servidores caindo! O ${victimName} perdeu todo o estoque de Café atual para pagar horas extras!`;
-      logMessage = `[${timestamp}] WARN: BUG EM PRODUÇÃO! ${victimName} perdeu todo o café acumulado.`;
+      description = 'Servidores caindo! Jogadores perdem 1 ponto de Café para cada carta de Estagiário ou Gerente de T.I. no campo (mínimo 0).';
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.coffee = 0;
-      } else {
-        updatedComputer.coffee = 0;
-      }
+      const isInternOrManager = (c: GameCard) => {
+        const roleLower = (c.role || '').toLowerCase();
+        return roleLower.includes('estagiá') || roleLower.includes('estagiari') || roleLower.includes('gerente');
+      };
+
+      const pPenalty = updatedPlayer.board.filter(isInternOrManager).length;
+      const cPenalty = updatedComputer.board.filter(isInternOrManager).length;
+
+      updatedPlayer.coffee = Math.max(0, updatedPlayer.coffee - pPenalty);
+      updatedComputer.coffee = Math.max(0, updatedComputer.coffee - cPenalty);
+
+      logMessage = `[${timestamp}] WARN: BUG EM PRODUÇÃO! Jogador perdeu ${pPenalty} Café (restam: ${updatedPlayer.coffee}) e Computador perdeu ${cPenalty} Café (restam: ${updatedComputer.coffee}).`;
       break;
     }
 
     case 'problema_trens': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
       title = '🚆 EVENTO: PROBLEMA NOS TRENS!';
-      description = `Falha na linha de trem/metrô! O ${victimName} perde a fase de ataque deste turno devido ao atraso.`;
-      logMessage = `[${timestamp}] NOTICE: PROBLEMA NOS TRENS! ${victimName} impedido de atacar no próximo turno.`;
+      description = 'Falha na linha de trem/metrô! As cartas compradas/contratadas ficam inativas, perdendo um turno de ataque.';
+      logMessage = `[${timestamp}] NOTICE: PROBLEMA NOS TRENS! Cartas contratadas na mesa de todos os jogadores inativas por 1 turno.`;
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.canAttackThisTurn = false;
-      } else {
-        updatedComputer.canAttackThisTurn = false;
-      }
+      updatedPlayer.board = updatedPlayer.board.map(c => ({
+        ...c,
+        isStunned: true,
+        stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+      }));
+      updatedComputer.board = updatedComputer.board.map(c => ({
+        ...c,
+        isStunned: true,
+        stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+      }));
       break;
     }
 
     case 'home_office': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
       title = '🏠 EVENTO: ENCHENTE (HOME-OFFICE FORÇADO)!';
-      description = `Trânsito parado e chuva forte! O ${victimName} ganhou +3 de Café extra economizando deslocamento!`;
-      logMessage = `[${timestamp}] SUCCESS: HOME-OFFICE CONCEDIDO! ${victimName} recebeu +3 de Café extra.`;
+      description = 'Chuva forte e trânsito travado! O jogador humano ganha +3 de Café extra economizando deslocamento!';
+      logMessage = `[${timestamp}] SUCCESS: HOME-OFFICE CONCEDIDO! Jogador humano recebeu +3 de Café extra.`;
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.coffee = Math.min(10, updatedPlayer.coffee + 3);
-      } else {
-        updatedComputer.coffee = Math.min(10, updatedComputer.coffee + 3);
-      }
+      updatedPlayer.coffee = Math.min(10, updatedPlayer.coffee + 3);
       break;
     }
 
     case 'pai_recem_nascido': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
-      title = '🍼 EVENTO: PAI DE RECÉM-NASCIDO!';
-      description = `Noites em claro trocando fraldas! Custo de Café de todas as cartas do ${victimName} aumenta em +1 pelas próximas 2 rodadas.`;
-      logMessage = `[${timestamp}] NOTICE: LICENÇA PATERNIDADE! Cartas de ${victimName} custam +1 Café por 2 rodadas.`;
+      title = '🍼 EVENTO: VIROU PAPAI!';
+      description = 'Noites em claro trocando fraldas! Uma carta de personagem masculino foi sorteada, voltando ao baralho com Custo +1 de Café.';
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.extraCoffeeCostRounds = 2;
+      if (allMaleInPlay.length > 0) {
+        const chosenMale = allMaleInPlay[Math.floor(Math.random() * allMaleInPlay.length)];
+
+        const removeCard = (state: PlayerState) => {
+          const bIdx = state.board.findIndex(c => c.instanceId === chosenMale.instanceId);
+          if (bIdx !== -1) {
+            state.board.splice(bIdx, 1);
+            return true;
+          }
+          const hIdx = state.hand.findIndex(c => c.instanceId === chosenMale.instanceId);
+          if (hIdx !== -1) {
+            state.hand.splice(hIdx, 1);
+            return true;
+          }
+          return false;
+        };
+
+        removeCard(updatedPlayer) || removeCard(updatedComputer);
+
+        const returnedCard: GameCard = {
+          ...chosenMale,
+          cost: chosenMale.cost + 1,
+          defense: chosenMale.maxDefense,
+          attackBuff: 0,
+          defenseBuff: 0,
+          isStunned: false,
+          stunnedRounds: 0,
+          pjBlocked: false,
+          pjBlockedRounds: 0,
+          isSick: false,
+          hasAttackedThisTurn: 0,
+        };
+
+        updatedDeck.push(returnedCard);
+        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! ${chosenMale.name} voltou ao baralho com Custo de Café +1 (Novo custo: ${returnedCard.cost}).`;
       } else {
-        updatedComputer.extraCoffeeCostRounds = 2;
+        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! Nenhum personagem masculino em jogo no momento.`;
       }
       break;
     }
 
     case 'gripe': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
       title = '🤧 EVENTO: EPIDEMIA DE GRIPE!';
-      description = `Surto de virose no escritório! O ${victimName} fica atordoado por 1 rodada e não pode jogar novas cartas da mão.`;
-      logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${victimName} atordoado por 1 rodada.`;
+      description = 'Surto de virose no escritório! Uma carta do jogador fica doente. Se usada num ataque, ela e o defensor vão para quarentena no baralho.';
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.canPlayCardsThisTurn = false;
+      if (updatedPlayer.board.length > 0) {
+        const sickIndex = Math.floor(Math.random() * updatedPlayer.board.length);
+        updatedPlayer.board[sickIndex] = {
+          ...updatedPlayer.board[sickIndex],
+          isSick: true,
+        };
+        const sickCard = updatedPlayer.board[sickIndex];
+        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do Jogador pegou gripe! Se atacar, ela e o defensor irão para quarentena no baralho.`;
       } else {
-        updatedComputer.canPlayCardsThisTurn = false;
+        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! O Jogador não possui cartas na mesa para serem infectadas.`;
       }
       break;
     }
 
     case 'gravidez': {
-      const victimName = targetPlayerId === 'player' ? 'Jogador' : 'Computador';
-      title = '🤰 EVENTO: LICENÇA MATERNIDADE / GRAVIDEZ!';
-      description = `Parabéns ao time! A dev do ${victimName} tirou licença, bloqueando a compra de novas cartas pelo ${victimName} por 3 rodadas.`;
-      logMessage = `[${timestamp}] NOTICE: MATERNIDADE CONFIRMADA! ${victimName} sem compras de deck por 3 rodadas.`;
+      title = '🤰 EVENTO: GRAVIDEZ?';
+      description = 'Uma carta de personagem feminino foi sorteada. Se CLT, entra em licença maternidade (3 rodadas inativa); se PJ, volta ao baralho.';
 
-      if (targetPlayerId === 'player') {
-        updatedPlayer.drawBlockedRounds = 3;
+      if (allFemaleInPlay.length > 0) {
+        const chosenFemale = allFemaleInPlay[Math.floor(Math.random() * allFemaleInPlay.length)];
+
+        if (!chosenFemale.isPJ) {
+          const markPregnant = (cList: GameCard[]) => {
+            const idx = cList.findIndex(c => c.instanceId === chosenFemale.instanceId);
+            if (idx !== -1) {
+              cList[idx] = {
+                ...cList[idx],
+                isPregnant: true,
+                pregnantRounds: 3,
+                isStunned: true,
+                stunnedRounds: 3,
+              };
+            }
+          };
+          markPregnant(updatedPlayer.board);
+          markPregnant(updatedPlayer.hand);
+          markPregnant(updatedComputer.board);
+          markPregnant(updatedComputer.hand);
+
+          logMessage = `[${timestamp}] NOTICE: LICENÇA MATERNIDADE! ${chosenFemale.name} (CLT) está em licença maternidade por 3 rodadas.`;
+        } else {
+          const removeCard = (state: PlayerState) => {
+            const bIdx = state.board.findIndex(c => c.instanceId === chosenFemale.instanceId);
+            if (bIdx !== -1) {
+              state.board.splice(bIdx, 1);
+              return true;
+            }
+            const hIdx = state.hand.findIndex(c => c.instanceId === chosenFemale.instanceId);
+            if (hIdx !== -1) {
+              state.hand.splice(hIdx, 1);
+              return true;
+            }
+            return false;
+          };
+
+          removeCard(updatedPlayer) || removeCard(updatedComputer);
+
+          const returnedCard: GameCard = {
+            ...chosenFemale,
+            defense: chosenFemale.maxDefense,
+            attackBuff: 0,
+            defenseBuff: 0,
+            isStunned: false,
+            stunnedRounds: 0,
+            pjBlocked: false,
+            pjBlockedRounds: 0,
+            isSick: false,
+            hasAttackedThisTurn: 0,
+          };
+
+          updatedDeck.push(returnedCard);
+          logMessage = `[${timestamp}] NOTICE: GRAVIDEZ (PJ)! ${chosenFemale.name} (Contrato PJ) rescindiu contrato e voltou ao baralho.`;
+        }
       } else {
-        updatedComputer.drawBlockedRounds = 3;
+        logMessage = `[${timestamp}] NOTICE: GRAVIDEZ? Nenhum personagem feminino em jogo no momento.`;
       }
       break;
     }
 
     case 'baixa_demanda': {
       title = '📉 EVENTO: BAIXA DEMANDA NOS CONTRATOS!';
-      description = 'Corte de consultores! Todas as cartas com a tag "Contrato PJ" em campo ficam impedidas de jogar/atacar por 1 rodada.';
-      logMessage = `[${timestamp}] WARN: BAIXA DEMANDA! Cartas com tag Contrato PJ bloqueadas por 1 rodada.`;
+      description = 'Corte de consultores! Cartas com a tag "Contrato PJ" em campo ficam inativas por 1 rodada.';
+      logMessage = `[${timestamp}] WARN: BAIXA DEMANDA! Cartas com tag Contrato PJ inativas por 1 rodada.`;
 
-      updatedPlayer.board = updatedPlayer.board.map(c => c.isPJ ? { ...c, pjBlocked: true } : c);
-      updatedComputer.board = updatedComputer.board.map(c => c.isPJ ? { ...c, pjBlocked: true } : c);
+      updatedPlayer.board = updatedPlayer.board.map(c => c.isPJ ? {
+        ...c,
+        pjBlocked: true,
+        pjBlockedRounds: 1,
+        isStunned: true,
+        stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+      } : c);
+
+      updatedComputer.board = updatedComputer.board.map(c => c.isPJ ? {
+        ...c,
+        pjBlocked: true,
+        pjBlockedRounds: 1,
+        isStunned: true,
+        stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+      } : c);
       break;
     }
 
@@ -171,7 +293,6 @@ export function triggerRandomEvent(
 
       const victim = targetPlayerId === 'player' ? updatedPlayer : updatedComputer;
       if (victim.hand.length > 0) {
-        // Discard highest cost card
         let highestIdx = 0;
         let highestCost = -1;
         victim.hand.forEach((c, idx) => {
@@ -204,6 +325,7 @@ export function triggerRandomEvent(
     event: globalEvent,
     updatedPlayer,
     updatedComputer,
+    updatedDeck,
     logMessage,
   };
 }

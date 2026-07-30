@@ -52,28 +52,83 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     avatarSvg: 'gisele',
     flavorText: 'Sobrinha do patrão com cargo VIP. Desmarca reuniões para fazer a unha.',
     quote: 'T.I. é fácil, só não entendo por que demora!'
+  },{
+    id: 'jussara_dores',
+    name: 'Jussara das Dores',
+    role: 'RH',
+    gender: 'F',
+    baseCost: 9,
+    baseAttack: 9,
+    baseDefense: 4,
+    isPJ: false,
+    avatarSvg: 'jussara',
+    flavorText: 'Rígida, austera e com cara de poucos amigos.',
+    quote: 'Regras acima de tudo!'
+  },
+  {
+    id: 'silas_kow',
+    name: 'Silas Kow',
+    role: 'DBA',
+    gender: 'M',
+    baseCost: 6,
+    baseAttack: 7,
+    baseDefense: 3,
+    isPJ: false,
+    avatarSvg: 'silas', 
+    flavorText: 'Pessimista e paranóico.',
+    quote: 'É só eu virar as costas que a procedure vai travar'
+  },
+  {
+    id: 'tomas_tigano',
+    name: 'Tomas Tigano',
+    role: 'Estagiário',
+    gender: 'M',
+    baseCost: 1,
+    baseAttack: 9,
+    baseDefense: 1,
+    isPJ: false,
+    avatarSvg: 'tomas',
+    flavorText: 'Sempre comendo...Como não engorda?!',
+    quote: 'Tenho fome de aprender!'
   }
 ];
 
 export function generateDeck(count: number = 24): GameCard[] {
   const deck: GameCard[] = [];
-  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade'];
+  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
 
   for (let i = 0; i < count; i++) {
-    // Pick one of the 4 templates
+    // Pick one of the templates
     const template = CARD_TEMPLATES[i % CARD_TEMPLATES.length];
 
     // Determine random variations for Contrato PJ
     const isPJ = Math.random() < 0.5; // 50% chance of being Contrato PJ
     
-    // Assign 0 to 2 random modifiers
-    const numModifiers = Math.random() < 0.4 ? 1 : Math.random() < 0.2 ? 2 : 0;
+    // Assign 0 to 2 random modifiers (increased modifier chance by 50%)
+    const rand = Math.random();
+    const numModifiers = rand < 0.18 ? 2 : rand < 0.78 ? 1 : 0;
     const cardModifiers: CardModifier[] = [];
     if (numModifiers > 0) {
       const shuffled = [...possibleModifiers].sort(() => 0.5 - Math.random());
       for (let m = 0; m < numModifiers; m++) {
         cardModifiers.push(shuffled[m]);
       }
+    }
+
+    // Determine buff values if 'buff' modifier is present (+0..3 / +0..3, never +0/+0)
+    let buffAttackValue = 0;
+    let buffDefenseValue = 0;
+    if (cardModifiers.includes('buff')) {
+      do {
+        buffAttackValue = Math.floor(Math.random() * 4); // 0, 1, 2, or 3
+        buffDefenseValue = Math.floor(Math.random() * 4); // 0, 1, 2, or 3
+      } while (buffAttackValue === 0 && buffDefenseValue === 0);
+    }
+
+    // Determine weaken power if 'enfraquecer' modifier is present (1..3)
+    let weakenPower = 0;
+    if (cardModifiers.includes('enfraquecer')) {
+      weakenPower = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
     }
 
     // Exact stats matching the character template
@@ -96,12 +151,20 @@ export function generateDeck(count: number = 24): GameCard[] {
       hasProtection: cardModifiers.includes('protecao'),
       hasAttackedThisTurn: 0,
       isStunned: false,
+      stunnedRounds: 0,
       pjBlocked: false,
+      pjBlockedRounds: 0,
+      isPregnant: false,
+      pregnantRounds: 0,
+      isSick: false,
       avatarSvg: template.avatarSvg,
       quote: template.quote,
       owner: 'player', // initialized upon draw
       attackBuff: 0,
       defenseBuff: 0,
+      buffAttackValue,
+      buffDefenseValue,
+      weakenPower,
     };
 
     deck.push(card);

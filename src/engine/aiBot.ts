@@ -4,6 +4,7 @@ import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, g
 export interface AiTurnResult {
   updatedComputer: PlayerState;
   updatedPlayer: PlayerState;
+  quarantinedCards?: GameCard[];
   actionsLog: string[];
   combatsExecuted: AttackAnimation[];
 }
@@ -19,6 +20,7 @@ export function executeAiTurn(
 ): AiTurnResult {
   let computer = JSON.parse(JSON.stringify(computerState)) as PlayerState;
   let player = JSON.parse(JSON.stringify(playerState)) as PlayerState;
+  const quarantinedCards: GameCard[] = [];
 
   const actionsLog: string[] = [];
   const combatsExecuted: AttackAnimation[] = [];
@@ -106,6 +108,9 @@ export function executeAiTurn(
 
       combatsExecuted.push(animation);
 
+      // Check if sick card quarantine is triggered
+      const isQuarantine = attacker.isSick || defender.isSick;
+
       // Update computer board state
       const atkIndex = computer.board.findIndex(c => c.instanceId === attacker.instanceId);
       if (atkIndex !== -1) {
@@ -113,6 +118,17 @@ export function executeAiTurn(
           computer.board.splice(atkIndex, 1);
           computer.firedCount += 1;
           actionsLog.push(`💥 ${attacker.name} do Computador foi demitido durante o contra-ataque de ${defender.name}!`);
+        } else if (isQuarantine) {
+          computer.board.splice(atkIndex, 1);
+          quarantinedCards.push({
+            ...updatedAttacker,
+            defense: updatedAttacker.maxDefense,
+            isSick: false,
+            attackBuff: 0,
+            defenseBuff: 0,
+            isStunned: false,
+            pjBlocked: false,
+          });
         } else {
           computer.board[atkIndex] = updatedAttacker;
         }
@@ -125,10 +141,25 @@ export function executeAiTurn(
           player.board.splice(defIndex, 1);
           player.firedCount += 1;
           actionsLog.push(`🔥 ${attacker.name} do Computador atacou e DEMITIU ${defender.name} do Jogador!`);
+        } else if (isQuarantine) {
+          player.board.splice(defIndex, 1);
+          quarantinedCards.push({
+            ...updatedDefender,
+            defense: updatedDefender.maxDefense,
+            isSick: false,
+            attackBuff: 0,
+            defenseBuff: 0,
+            isStunned: false,
+            pjBlocked: false,
+          });
         } else {
           player.board[defIndex] = updatedDefender;
           actionsLog.push(`⚔️ ${attacker.name} atacou ${defender.name} (Dano trocado: ${animation.damageToDefender} / ${animation.damageToAttacker}).`);
         }
+      }
+
+      if (isQuarantine) {
+        actionsLog.push(`😷 QUARENTENA! ${attacker.name} e ${defender.name} foram enviados de volta ao baralho.`);
       }
     }
   } else {
@@ -138,6 +169,7 @@ export function executeAiTurn(
   return {
     updatedComputer: computer,
     updatedPlayer: player,
+    quarantinedCards,
     actionsLog,
     combatsExecuted,
   };
