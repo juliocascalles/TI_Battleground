@@ -200,7 +200,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({ isOpen, onCl
             )}
           </div>
           <p className="text-slate-400">
-            Clique no botão abaixo para mover os arquivos da pasta <code className="text-cyan-300 bg-slate-900 px-1 py-0.5 rounded">assets/card_info</code> para a pasta <strong>card_info</strong> do Google Drive. Todas as cartas do jogo serão atualizadas instantaneamente para usar as URLs publicamente visíveis do Drive!
+            O jogo carrega automaticamente as imagens do Google Drive. Ao clicar no botão abaixo, todas as imagens locais da pasta <code className="text-cyan-300 bg-slate-900 px-1 py-0.5 rounded">assets/card_info</code> do AI Studio são enviadas e atualizadas na pasta <strong>card_info</strong> do Google Drive antes do jogo ser publicado!
           </p>
         </div>
 
@@ -214,12 +214,12 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({ isOpen, onCl
             {isSyncing ? (
               <>
                 <RefreshCw className="w-5 h-5 animate-spin text-cyan-200" />
-                Movendo arquivos para o Google Drive ({progress?.index || 0}/{progress?.total || 7})...
+                Atualizando imagens no Google Drive ({progress?.index || 0}/{progress?.total || 7})...
               </>
             ) : (
               <>
                 <CloudUpload className="w-5 h-5 text-cyan-200" />
-                Mover 'assets/card_info' para o Google Drive e Substituir Referências
+                Atualizar Imagens do AI Studio no Google Drive
               </>
             )}
           </button>
