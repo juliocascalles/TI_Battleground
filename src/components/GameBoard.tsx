@@ -72,7 +72,7 @@ export const GameBoard: React.FC = () => {
   // Modals & Sound
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [winner, setWinner] = useState<'player' | 'computer' | null>(null);
+  const [winner, setWinner] = useState<'player' | 'computer' | 'tie' | null>(null);
 
   // Event animation duration timer: Event animations last 3 seconds, then terminate
   useEffect(() => {
@@ -159,26 +159,55 @@ export const GameBoard: React.FC = () => {
     initGame();
   }, []);
 
-  // --- VICTORY / DEFEAT EVALUATION ---
+  // --- VICTORY / DEFEAT / TIE EVALUATION ---
   useEffect(() => {
     if (!isGameStarted || winner || isAnimating) return;
 
-    // Do not check victory if game initialization is incomplete or empty
-    if (player.hand.length === 0 && player.board.length === 0 && computer.hand.length === 0 && computer.board.length === 0) {
+    // Requirement 1: Victory / Defeat / Tie ONLY evaluates after the deck has completely run out!
+    if (deck.length > 0) return;
+
+    const playerBoardCount = player.board.filter(c => getEffectiveDefense(c) > 0).length;
+    const compBoardCount = computer.board.filter(c => getEffectiveDefense(c) > 0).length;
+
+    // 1. If computer board and hand are wiped while deck is empty, player wins!
+    if (compBoardCount === 0 && computer.hand.length === 0 && playerBoardCount > 0) {
+      setWinner('player');
       return;
     }
 
-    // Check if player is completely cleared
-    const playerHasAliveCards = player.board.some(c => getEffectiveDefense(c) > 0);
-    const playerCanPlayMore = player.hand.some(c => getActualCardCost(c, player) <= player.coffee);
-    const playerDeckEmpty = deck.length === 0;
-
-    const computerHasAliveCards = computer.board.some(c => getEffectiveDefense(c) > 0);
-
-    if (!playerHasAliveCards && !playerCanPlayMore && player.hand.length === 0 && playerDeckEmpty) {
+    // 2. If player board and hand are wiped while deck is empty, computer wins!
+    if (playerBoardCount === 0 && player.hand.length === 0 && compBoardCount > 0) {
       setWinner('computer');
-    } else if (!computerHasAliveCards && computer.hand.length === 0 && computer.board.length === 0 && playerHasAliveCards) {
-      setWinner('player');
+      return;
+    }
+
+    // 3. When both hands are empty and deck is empty, evaluate final game winner or tie
+    if (player.hand.length === 0 && computer.hand.length === 0) {
+      if (playerBoardCount > compBoardCount) {
+        setWinner('player');
+      } else if (compBoardCount > playerBoardCount) {
+        setWinner('computer');
+      } else {
+        // Equal alive cards on board (or 0 vs 0). Compare demissões / enemy cards fired
+        if (computer.firedCount > player.firedCount) {
+          setWinner('player');
+        } else if (player.firedCount > computer.firedCount) {
+          setWinner('computer');
+        } else {
+          // Compare sum of total defense on board
+          const pDefSum = player.board.reduce((sum, c) => sum + Math.max(0, getEffectiveDefense(c)), 0);
+          const cDefSum = computer.board.reduce((sum, c) => sum + Math.max(0, getEffectiveDefense(c)), 0);
+
+          if (pDefSum > cDefSum) {
+            setWinner('player');
+          } else if (cDefSum > pDefSum) {
+            setWinner('computer');
+          } else {
+            // Requirement 2: Tela de empate caso aconteça
+            setWinner('tie');
+          }
+        }
+      }
     }
   }, [isGameStarted, player, computer, deck, winner, isAnimating]);
 
