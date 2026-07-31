@@ -5,7 +5,7 @@ import { GameCard, PlayerState, AttackAnimation } from '../types';
  * If the opponent board contains any card with 'prioridade', the target MUST be one of those cards.
  */
 export function isValidAttackTarget(targetCard: GameCard, opponentBoard: GameCard[]): boolean {
-  const priorityCards = opponentBoard.filter(c => c.modifiers.includes('prioridade') && c.defense > 0);
+  const priorityCards = opponentBoard.filter(c => c.modifiers.includes('prioridade') && getEffectiveDefense(c) > 0);
   if (priorityCards.length > 0) {
     return targetCard.modifiers.includes('prioridade');
   }
@@ -23,7 +23,32 @@ export function getEffectiveAttack(card: GameCard): number {
  * Calculates effective defense of a card considering active buffs.
  */
 export function getEffectiveDefense(card: GameCard): number {
-  return Math.max(0, card.defense + card.defenseBuff);
+  return card.defense + card.defenseBuff;
+}
+
+/**
+ * Applies damage to a card, absorbing first with defenseBuff then base defense.
+ */
+export function applyDamageToCard(card: GameCard, damage: number): GameCard {
+  if (damage <= 0) return card;
+  const updated = { ...card };
+  let remainingDamage = damage;
+
+  if (updated.defenseBuff > 0) {
+    if (updated.defenseBuff >= remainingDamage) {
+      updated.defenseBuff -= remainingDamage;
+      remainingDamage = 0;
+    } else {
+      remainingDamage -= updated.defenseBuff;
+      updated.defenseBuff = 0;
+    }
+  }
+
+  if (remainingDamage > 0) {
+    updated.defense -= remainingDamage;
+  }
+
+  return updated;
 }
 
 /**
@@ -65,7 +90,7 @@ export function resolveCombat(
     damageToDefender = 0;
   } else {
     damageToDefender = atkPower;
-    updatedDefender.defense -= damageToDefender;
+    updatedDefender = applyDamageToCard(updatedDefender, damageToDefender);
   }
 
   // 1b. Apply Enfraquecer from Attacker to Defender
@@ -81,13 +106,22 @@ export function resolveCombat(
     damageToAttacker = 0;
   } else {
     damageToAttacker = defPower;
-    updatedAttacker.defense -= damageToAttacker;
+    updatedAttacker = applyDamageToCard(updatedAttacker, damageToAttacker);
   }
 
   // 2b. Apply Enfraquecer from Defender to Attacker if Defender has it
   if (defender.modifiers.includes('enfraquecer')) {
     const weakenVal = defender.weakenPower ?? 1;
     updatedAttacker.attack = Math.max(0, updatedAttacker.attack - weakenVal);
+  }
+
+  // 2c. Apply Gripe contagion if either card is sick
+  if (attacker.isSick || defender.isSick) {
+    updatedAttacker.isSick = true;
+    updatedAttacker.attack = Math.max(0, updatedAttacker.attack - 1);
+
+    updatedDefender.isSick = true;
+    updatedDefender.attack = Math.max(0, updatedDefender.attack - 1);
   }
 
   updatedAttacker.hasAttackedThisTurn += 1;
@@ -124,7 +158,6 @@ export function applyPlayBuff(playedCard: GameCard, allyBoard: GameCard[]): Game
     ...card,
     attackBuff: card.attackBuff + atkAdd,
     defenseBuff: card.defenseBuff + defAdd,
-    defense: card.defense + defAdd,
     maxDefense: card.maxDefense + defAdd,
   }));
 }

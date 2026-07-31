@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameCard, PlayerState, GlobalEvent } from '../types';
 import { generateDeck } from '../data/cardsData';
-import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, getMaxAttacksAllowed } from '../engine/rules';
+import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack } from '../engine/rules';
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
 
@@ -169,11 +169,11 @@ export const GameBoard: React.FC = () => {
     }
 
     // Check if player is completely cleared
-    const playerHasAliveCards = player.board.some(c => c.defense > 0);
+    const playerHasAliveCards = player.board.some(c => getEffectiveDefense(c) > 0);
     const playerCanPlayMore = player.hand.some(c => getActualCardCost(c, player) <= player.coffee);
     const playerDeckEmpty = deck.length === 0;
 
-    const computerHasAliveCards = computer.board.some(c => c.defense > 0);
+    const computerHasAliveCards = computer.board.some(c => getEffectiveDefense(c) > 0);
 
     if (!playerHasAliveCards && !playerCanPlayMore && player.hand.length === 0 && playerDeckEmpty) {
       setWinner('computer');
@@ -266,8 +266,8 @@ export const GameBoard: React.FC = () => {
     // Resolve Combat
     const { updatedAttacker, updatedDefender, animation } = resolveCombat(attacker, defender);
 
-    const defenderFired = updatedDefender.defense <= 0;
-    const attackerFired = updatedAttacker.defense <= 0;
+    const defenderFired = getEffectiveDefense(updatedDefender) <= 0;
+    const attackerFired = getEffectiveDefense(updatedAttacker) <= 0;
 
     if (defenderFired || attackerFired) {
       soundFx.cardFiredSound();
@@ -342,68 +342,27 @@ export const GameBoard: React.FC = () => {
     // 3. Wait remaining duration of 3 seconds total pause (2200ms) so human player can read screen and see DEMITIDO! stamp
     await new Promise(r => setTimeout(r, 2200));
 
-    // 4. NOW remove fired cards (defense <= 0) or send non-fired cards to quarantine if attacker was sick!
-    const isQuarantine = attacker.isSick;
-
-    if (isQuarantine) {
-      setDeck(prevDeck => {
-        const returned: GameCard[] = [];
-        if (!attackerFired) {
-          returned.push({
-            ...updatedAttacker,
-            defense: updatedAttacker.maxDefense,
-            isSick: false,
-            attackBuff: 0,
-            defenseBuff: 0,
-            isStunned: false,
-            pjBlocked: false,
-          });
-        }
-        if (!defenderFired) {
-          returned.push({
-            ...updatedDefender,
-            defense: updatedDefender.maxDefense,
-            isSick: false,
-            attackBuff: 0,
-            defenseBuff: 0,
-            isStunned: false,
-            pjBlocked: false,
-          });
-        }
-        return [...prevDeck, ...returned];
-      });
-
-      setPlayer(prev => ({
+    // 4. NOW remove fired cards (defense <= 0)
+    setPlayer(prev => {
+      const firedInTurn = prev.board.filter(c => getEffectiveDefense(c) <= 0).length;
+      return {
         ...prev,
-        board: prev.board.filter(c => c.defense > 0 && c.instanceId !== attacker.instanceId && c.instanceId !== defender.instanceId),
-        firedCount: prev.firedCount + (prev.board.filter(c => (c.instanceId === attacker.instanceId || c.instanceId === defender.instanceId) && c.defense <= 0).length),
-      }));
+        board: prev.board.filter(c => getEffectiveDefense(c) > 0),
+        firedCount: prev.firedCount + firedInTurn,
+      };
+    });
 
-      setComputer(prev => ({
+    setComputer(prev => {
+      const firedInTurn = prev.board.filter(c => getEffectiveDefense(c) <= 0).length;
+      return {
         ...prev,
-        board: prev.board.filter(c => c.defense > 0 && c.instanceId !== attacker.instanceId && c.instanceId !== defender.instanceId),
-        firedCount: prev.firedCount + (prev.board.filter(c => (c.instanceId === attacker.instanceId || c.instanceId === defender.instanceId) && c.defense <= 0).length),
-      }));
+        board: prev.board.filter(c => getEffectiveDefense(c) > 0),
+        firedCount: prev.firedCount + firedInTurn,
+      };
+    });
 
-      setLogs(prev => [...prev, `😷 QUARENTENA (Epidemia de Gripe)! ${attacker.name} (doente) e ${defender.name} foram enviadas ao baralho.`]);
-    } else {
-      setPlayer(prev => {
-        const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
-        return {
-          ...prev,
-          board: prev.board.filter(c => c.defense > 0),
-          firedCount: prev.firedCount + firedInTurn,
-        };
-      });
-
-      setComputer(prev => {
-        const firedInTurn = prev.board.filter(c => c.defense <= 0).length;
-        return {
-          ...prev,
-          board: prev.board.filter(c => c.defense > 0),
-          firedCount: prev.firedCount + firedInTurn,
-        };
-      });
+    if (attacker.isSick || defender.isSick) {
+      setLogs(prev => [...prev, `😷 CONTAGIO DE GRIPE! O contato entre ${attacker.name} e ${defender.name} transmitiu a virose (-1 de Ataque).`]);
     }
 
     setSelectedAttackerId(null);
@@ -488,15 +447,15 @@ export const GameBoard: React.FC = () => {
       await new Promise(r => setTimeout(r, 3000));
 
       // Filter out fired cards (defense <= 0) resulting from events like Layoff
-      const pFired = updatedP.board.filter(c => c.defense <= 0);
+      const pFired = updatedP.board.filter(c => getEffectiveDefense(c) <= 0);
       if (pFired.length > 0) {
         updatedP.firedCount += pFired.length;
-        updatedP.board = updatedP.board.filter(c => c.defense > 0);
+        updatedP.board = updatedP.board.filter(c => getEffectiveDefense(c) > 0);
       }
-      const cFired = updatedC.board.filter(c => c.defense <= 0);
+      const cFired = updatedC.board.filter(c => getEffectiveDefense(c) <= 0);
       if (cFired.length > 0) {
         updatedC.firedCount += cFired.length;
-        updatedC.board = updatedC.board.filter(c => c.defense > 0);
+        updatedC.board = updatedC.board.filter(c => getEffectiveDefense(c) > 0);
       }
     } else {
       setTurnsSinceLastEvent(prev => prev + 1);
@@ -554,8 +513,8 @@ export const GameBoard: React.FC = () => {
         }
 
         playableCards.sort((a, b) => {
-          const scoreA = (a.card.modifiers.includes('buff') ? 3 : 0) + (a.card.modifiers.includes('prioridade') ? 2 : 0) + a.card.attack + a.card.defense;
-          const scoreB = (b.card.modifiers.includes('buff') ? 3 : 0) + (b.card.modifiers.includes('prioridade') ? 2 : 0) + b.card.attack + b.card.defense;
+          const scoreA = (a.card.modifiers.includes('buff') ? 3 : 0) + (a.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(a.card) + getEffectiveDefense(a.card);
+          const scoreB = (b.card.modifiers.includes('buff') ? 3 : 0) + (b.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(b.card) + getEffectiveDefense(b.card);
           return scoreB - scoreA;
         });
 
@@ -595,10 +554,10 @@ export const GameBoard: React.FC = () => {
 
         const readyAttackers = latestCompBoard.filter(c => {
           const maxAttacks = getMaxAttacksAllowed(c);
-          return c.defense > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
+          return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
         });
 
-        const aliveDefenders = latestPlayerBoard.filter(c => c.defense > 0);
+        const aliveDefenders = latestPlayerBoard.filter(c => getEffectiveDefense(c) > 0);
 
         if (readyAttackers.length === 0 || aliveDefenders.length === 0) {
           attackLoop = false;
@@ -614,9 +573,9 @@ export const GameBoard: React.FC = () => {
         }
 
         validTargets.sort((a, b) => {
-          const killA = a.defense <= attacker.attack ? 10 : 0;
-          const killB = b.defense <= attacker.attack ? 10 : 0;
-          return (killB + b.attack) - (killA + a.attack);
+          const killA = getEffectiveDefense(a) <= getEffectiveAttack(attacker) ? 10 : 0;
+          const killB = getEffectiveDefense(b) <= getEffectiveAttack(attacker) ? 10 : 0;
+          return (killB + getEffectiveAttack(b)) - (killA + getEffectiveAttack(a));
         });
 
         const defender = validTargets[0];
@@ -899,7 +858,7 @@ export const GameBoard: React.FC = () => {
                     {cardOwnerLabel}
                   </span>
                   <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 font-mono text-[11px] text-slate-200">
-                    ⚔️ Ataque: {cardToShow.attack + cardToShow.attackBuff} | 🛡️ Defesa: {cardToShow.defense} | ☕ Custo: {actualCost}
+                    ⚔️ Ataque: {cardToShow.attack + cardToShow.attackBuff} | 🛡️ Defesa: {getEffectiveDefense(cardToShow)} | ☕ Custo: {actualCost}
                   </span>
                   {cardToShow.isPJ ? (
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
@@ -919,7 +878,7 @@ export const GameBoard: React.FC = () => {
                 {/* MODIFICADORES E STATUS DA CARTA */}
                 <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
                   <span className="text-slate-400 font-medium">Status:</span>
-                  {cardToShow.defense > 0 && !cardToShow.isStunned && !cardToShow.pjBlocked ? (
+                  {getEffectiveDefense(cardToShow) > 0 && !cardToShow.isStunned && !cardToShow.pjBlocked ? (
                     <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" /> Ativa
                     </span>

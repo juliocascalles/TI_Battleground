@@ -1,5 +1,5 @@
 import { PlayerState, GameCard, AttackAnimation } from '../types';
-import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, getMaxAttacksAllowed } from './rules';
+import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, getMaxAttacksAllowed, getEffectiveAttack, getEffectiveDefense } from './rules';
 
 export interface AiTurnResult {
   updatedComputer: PlayerState;
@@ -41,8 +41,8 @@ export function executeAiTurn(
 
       // Prioritize cards with 'buff', 'prioridade', or best attack/defense ratio
       playableCards.sort((a, b) => {
-        const scoreA = (a.card.modifiers.includes('buff') ? 3 : 0) + (a.card.modifiers.includes('prioridade') ? 2 : 0) + a.card.attack + a.card.defense;
-        const scoreB = (b.card.modifiers.includes('buff') ? 3 : 0) + (b.card.modifiers.includes('prioridade') ? 2 : 0) + b.card.attack + b.card.defense;
+        const scoreA = (a.card.modifiers.includes('buff') ? 3 : 0) + (a.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(a.card) + getEffectiveDefense(a.card);
+        const scoreB = (b.card.modifiers.includes('buff') ? 3 : 0) + (b.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(b.card) + getEffectiveDefense(b.card);
         return scoreB - scoreA;
       });
 
@@ -72,11 +72,11 @@ export function executeAiTurn(
       // Filter computer cards that can still attack
       const readyAttackers = computer.board.filter(c => {
         const maxAttacks = getMaxAttacksAllowed(c);
-        return c.defense > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
+        return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
       });
 
       // Filter alive player defender targets
-      const aliveDefenders = player.board.filter(c => c.defense > 0);
+      const aliveDefenders = player.board.filter(c => getEffectiveDefense(c) > 0);
 
       if (readyAttackers.length === 0 || aliveDefenders.length === 0) {
         attackLoop = false;
@@ -94,11 +94,11 @@ export function executeAiTurn(
         break;
       }
 
-      // Select best target (target with defense <= attacker.attack to get a guaranteed kill, or highest threat)
+      // Select best target (target with total defense <= attacker.attack to get a guaranteed kill, or highest threat)
       validTargets.sort((a, b) => {
-        const killA = a.defense <= attacker.attack ? 10 : 0;
-        const killB = b.defense <= attacker.attack ? 10 : 0;
-        return (killB + b.attack) - (killA + a.attack);
+        const killA = getEffectiveDefense(a) <= getEffectiveAttack(attacker) ? 10 : 0;
+        const killB = getEffectiveDefense(b) <= getEffectiveAttack(attacker) ? 10 : 0;
+        return (killB + getEffectiveAttack(b)) - (killA + getEffectiveAttack(a));
       });
 
       const defender = validTargets[0];
@@ -114,7 +114,7 @@ export function executeAiTurn(
       // Update computer board state
       const atkIndex = computer.board.findIndex(c => c.instanceId === attacker.instanceId);
       if (atkIndex !== -1) {
-        if (updatedAttacker.defense <= 0) {
+        if (getEffectiveDefense(updatedAttacker) <= 0) {
           computer.board.splice(atkIndex, 1);
           computer.firedCount += 1;
           actionsLog.push(`💥 ${attacker.name} do Computador foi demitido durante o contra-ataque de ${defender.name}!`);
@@ -137,7 +137,7 @@ export function executeAiTurn(
       // Update player board state
       const defIndex = player.board.findIndex(c => c.instanceId === defender.instanceId);
       if (defIndex !== -1) {
-        if (updatedDefender.defense <= 0) {
+        if (getEffectiveDefense(updatedDefender) <= 0) {
           player.board.splice(defIndex, 1);
           player.firedCount += 1;
           actionsLog.push(`🔥 ${attacker.name} do Computador atacou e DEMITIU ${defender.name} do Jogador!`);

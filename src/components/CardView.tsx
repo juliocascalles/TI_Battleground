@@ -2,6 +2,7 @@ import React from 'react';
 import { GameCard } from '../types';
 import { CardSvgAvatar } from './CardSvgAvatar';
 import { Shield, Zap, Swords, Target, Lock, Train, Baby, TrendingDown, Activity, Home, AlertTriangle, Clock } from 'lucide-react';
+import { getEffectiveDefense } from '../engine/rules';
 
 interface CardViewProps {
   card: GameCard;
@@ -54,10 +55,11 @@ export const CardView: React.FC<CardViewProps> = ({
   className = '',
 }) => {
   const displayCost = actualCost !== undefined ? actualCost : card.cost;
-  const isFired = card.defense <= 0;
-  const isActive = card.defense > 0 && !card.isStunned && !card.pjBlocked && !card.isPregnant;
+  const effectiveDef = getEffectiveDefense(card);
+  const isFired = effectiveDef <= 0;
+  const isActive = effectiveDef > 0 && !card.isStunned && !card.pjBlocked && !card.isPregnant;
   const totalAttack = card.attack + card.attackBuff;
-  const totalDefense = Math.max(0, card.defense + card.defenseBuff);
+  const totalDefense = Math.max(0, effectiveDef);
 
   return (
     <div
@@ -140,7 +142,7 @@ export const CardView: React.FC<CardViewProps> = ({
             fontFamily="system-ui, -apple-system, sans-serif"
             fontWeight="900"
             fontSize="75"
-            fill={card.defense < card.maxDefense ? '#cc0015' : '#000000'}
+            fill={effectiveDef < card.maxDefense ? '#cc0015' : '#000000'}
             filter="url(#textGlow)"
           >
             {totalDefense}

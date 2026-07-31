@@ -1,4 +1,5 @@
 import { EventType, GlobalEvent, PlayerState, GameCard } from '../types';
+import { applyDamageToCard } from './rules';
 
 export const ALL_EVENT_TYPES: EventType[] = [
   'layoff',
@@ -84,8 +85,8 @@ export function triggerRandomEvent(
       description = 'Corte de gastos da diretoria! Todas as cartas de todos os jogadores sofrem 2 pontos de dano e reavalia demissão.';
       logMessage = `[${timestamp}] CRITICAL: LAYOFF DETECTADO! 2 pts de dano em todas as cartas da mesa.`;
 
-      updatedPlayer.board = updatedPlayer.board.map(c => ({ ...c, defense: c.defense - 2 }));
-      updatedComputer.board = updatedComputer.board.map(c => ({ ...c, defense: c.defense - 2 }));
+      updatedPlayer.board = updatedPlayer.board.map(c => applyDamageToCard(c, 2));
+      updatedComputer.board = updatedComputer.board.map(c => applyDamageToCard(c, 2));
       break;
     }
 
@@ -184,16 +185,18 @@ export function triggerRandomEvent(
 
     case 'gripe': {
       title = '🤧 EVENTO: EPIDEMIA DE GRIPE!';
-      description = 'Surto de virose no escritório! Uma carta do jogador fica doente. Se usada num ataque, ela e o defensor vão para quarentena no baralho.';
+      description = 'Surto de virose no escritório! Uma carta do jogador fica doente (-1 de Ataque). Toda carta que entrar em contato com ela também ficará doente!';
 
       if (updatedPlayer.board.length > 0) {
         const sickIndex = Math.floor(Math.random() * updatedPlayer.board.length);
+        const targetCard = updatedPlayer.board[sickIndex];
         updatedPlayer.board[sickIndex] = {
-          ...updatedPlayer.board[sickIndex],
+          ...targetCard,
           isSick: true,
+          attack: Math.max(0, targetCard.attack - 1),
         };
         const sickCard = updatedPlayer.board[sickIndex];
-        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do Jogador pegou gripe! Se atacar, ela e o defensor irão para quarentena no baralho.`;
+        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do Jogador pegou gripe (-1 de Ataque)! Qualquer carta que entrar em contato com ela também ficará doente.`;
       } else {
         logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! O Jogador não possui cartas na mesa para serem infectadas.`;
       }
