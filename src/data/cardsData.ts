@@ -93,7 +93,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   }
 ];
 
-export function generateDeck(count: number = 24): GameCard[] {
+export function generateDeck(count: number = 48): GameCard[] {
   const deck: GameCard[] = [];
   const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
 

@@ -39,6 +39,7 @@ export const LOCAL_ASSETS: Record<string, string> = {
 
 // Public direct download URLs requested by user
 export const PUBLIC_ASSET_URLS: Record<string, string> = {
+  'verso_da_carta.png': 'https://drive.usercontent.google.com/download?id=19YW-nRJbyxjRKzcRA6dPmsoX6sBFhfei',
   'Gisele_Gante.png': 'https://drive.usercontent.google.com/download?id=1lynqDf2CwizUEoE6CvmMcvcN0QTIiBxz',
   'Igor_Dinho.png': 'https://drive.usercontent.google.com/download?id=1x0yz99-9r4xWRlqP7cNinYb8gcYELMwH',
   'Johny_da_Silva.png': 'https://drive.usercontent.google.com/download?id=1WhyKeVVoPxlY1lL47DJ2s5fyaShUFs_n',

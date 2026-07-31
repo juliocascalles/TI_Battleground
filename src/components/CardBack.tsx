@@ -31,6 +31,16 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     e.currentTarget.onerror = null;
+
+    const idMatch = versoUrl.match(/id=([a-zA-Z0-9_-]+)/);
+    if (idMatch && idMatch[1]) {
+      const driveCdnUrl = `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+      if (versoUrl !== driveCdnUrl) {
+        setVersoUrl(driveCdnUrl);
+        return;
+      }
+    }
+
     const localUrl = LOCAL_ASSETS['verso_da_carta.png'];
     if (localUrl && versoUrl !== localUrl) {
       setVersoUrl(localUrl);

@@ -5,7 +5,7 @@ import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, g
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
 
-import { CardView } from './CardView';
+import { CardView, getEventStatusIcon } from './CardView';
 import { CardBack } from './CardBack';
 import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
@@ -101,7 +101,7 @@ export const GameBoard: React.FC = () => {
 
   // --- INITIALIZE GAME ---
   const initGame = () => {
-    const fullDeck = generateDeck(24);
+    const fullDeck = generateDeck(48);
 
     // Deal 4 initial cards to Player hand and 4 to Computer hand
     const playerHand = fullDeck.slice(0, 4).map(c => ({ ...c, owner: 'player' as const }));
@@ -454,6 +454,7 @@ export const GameBoard: React.FC = () => {
         hasAttackedThisTurn: 0,
         stunnedRounds,
         isStunned: stunnedRounds > 0,
+        stunReason: stunnedRounds > 0 ? c.stunReason : undefined,
         pjBlockedRounds,
         pjBlocked: pjBlockedRounds > 0,
         pregnantRounds,
@@ -669,6 +670,7 @@ export const GameBoard: React.FC = () => {
             hasAttackedThisTurn: 0,
             stunnedRounds,
             isStunned: stunnedRounds > 0,
+            stunReason: stunnedRounds > 0 ? c.stunReason : undefined,
             pjBlockedRounds,
             pjBlocked: pjBlockedRounds > 0,
             pregnantRounds,
@@ -946,11 +948,17 @@ export const GameBoard: React.FC = () => {
                       <Target className="w-3 h-3 text-purple-300" /> Prioridade (Taunt)
                     </span>
                   )}
-                  {cardToShow.isStunned && (
-                    <span className="text-yellow-300 bg-yellow-950/80 px-2 py-0.5 rounded border border-yellow-500/50 flex items-center gap-1 font-semibold">
-                      <Lock className="w-3 h-3 text-yellow-400" /> Atordoado
-                    </span>
-                  )}
+                  {cardToShow.isStunned && (() => {
+                    const rounds = cardToShow.stunnedRounds !== undefined && cardToShow.stunnedRounds > 0 ? cardToShow.stunnedRounds : 1;
+                    const turnsText = rounds === 1 ? '1 turno' : `${rounds} turnos`;
+                    const reasonText = cardToShow.stunReason || (cardToShow.pjBlocked ? 'Baixa Demanda' : 'Ausente');
+                    return (
+                      <span className="text-yellow-300 bg-yellow-950/80 px-2 py-0.5 rounded border border-yellow-500/50 flex items-center gap-1 font-bold">
+                        {getEventStatusIcon(reasonText, activeEvent?.title)}
+                        {reasonText} por {turnsText}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
 

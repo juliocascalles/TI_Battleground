@@ -32,6 +32,7 @@ export interface GameCard {
   hasAttackedThisTurn: number; // Max allowed depends on ataque_duplo (1 or 2)
   isStunned: boolean; // From events
   stunnedRounds?: number;
+  stunReason?: string; // Reason or event name e.g. "Problema nos Trens", "Baixa Demanda", "Ausente"
   pjBlocked: boolean; // From Baixa Demanda event
   pjBlockedRounds?: number;
   isPregnant?: boolean; // From Gravidez event

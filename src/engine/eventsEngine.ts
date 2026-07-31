@@ -117,11 +117,13 @@ export function triggerRandomEvent(
         ...c,
         isStunned: true,
         stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+        stunReason: 'Problema nos Trens',
       }));
       updatedComputer.board = updatedComputer.board.map(c => ({
         ...c,
         isStunned: true,
         stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+        stunReason: 'Problema nos Trens',
       }));
       break;
     }
@@ -215,6 +217,7 @@ export function triggerRandomEvent(
                 pregnantRounds: 3,
                 isStunned: true,
                 stunnedRounds: 3,
+                stunReason: 'Licença Maternidade',
               };
             }
           };
@@ -274,6 +277,7 @@ export function triggerRandomEvent(
         pjBlockedRounds: 1,
         isStunned: true,
         stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+        stunReason: 'Baixa Demanda',
       } : c);
 
       updatedComputer.board = updatedComputer.board.map(c => c.isPJ ? {
@@ -282,6 +286,7 @@ export function triggerRandomEvent(
         pjBlockedRounds: 1,
         isStunned: true,
         stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
+        stunReason: 'Baixa Demanda',
       } : c);
       break;
     }

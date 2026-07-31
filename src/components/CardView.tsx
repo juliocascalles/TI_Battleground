@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameCard } from '../types';
 import { CardSvgAvatar } from './CardSvgAvatar';
-import { Shield, Zap, Swords, Target, Lock } from 'lucide-react';
+import { Shield, Zap, Swords, Target, Lock, Train, Baby, TrendingDown, Activity, Home, AlertTriangle, Clock } from 'lucide-react';
 
 interface CardViewProps {
   card: GameCard;
@@ -16,6 +16,29 @@ interface CardViewProps {
   actualCost?: number;
   className?: string;
 }
+
+export const getEventStatusIcon = (reason?: string, eventNameStr?: string) => {
+  const combined = `${reason || ''} ${eventNameStr || ''}`.toLowerCase();
+  if (combined.includes('trem') || combined.includes('metrô') || combined.includes('metro')) {
+    return <Train className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  if (combined.includes('maternidade') || combined.includes('gravidez') || combined.includes('papai') || combined.includes('bebê')) {
+    return <Baby className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  if (combined.includes('baixa demanda') || combined.includes('demanda') || combined.includes('pj')) {
+    return <TrendingDown className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  if (combined.includes('gripe') || combined.includes('doente') || combined.includes('virose')) {
+    return <Activity className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  if (combined.includes('home') || combined.includes('enchente')) {
+    return <Home className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  if (combined.includes('bug') || combined.includes('layoff')) {
+    return <AlertTriangle className="w-4 h-4 shrink-0 text-slate-950" />;
+  }
+  return <Clock className="w-4 h-4 shrink-0 text-slate-950" />;
+};
 
 export const CardView: React.FC<CardViewProps> = ({
   card,
@@ -245,38 +268,59 @@ export const CardView: React.FC<CardViewProps> = ({
         </div>
       )}
 
-      {/* PREGNANT OVERLAY */}
-      {card.isPregnant && !isFired && (
-        <div className="absolute inset-0 bg-pink-950/75 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none">
-          <div className="flex items-center gap-1.5 bg-pink-500/90 text-slate-950 px-3 py-1 rounded-md font-bold text-xs shadow-lg">
-            🤰 MATERNIDADE ({card.pregnantRounds || 3}R)
+      {/* PREGNANT / MATERNIDADE OVERLAY */}
+      {card.isPregnant && !isFired && (() => {
+        const rounds = card.pregnantRounds !== undefined && card.pregnantRounds > 0 ? card.pregnantRounds : 3;
+        const turnsText = rounds === 1 ? '1 turno' : `${rounds} turnos`;
+        const reasonText = card.stunReason || 'Licença Maternidade';
+        return (
+          <div className="absolute inset-0 bg-pink-950/80 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none p-2 text-center">
+            <div className="flex items-center gap-1.5 bg-pink-400 text-slate-950 px-2.5 py-1.5 rounded-lg font-black text-xs shadow-xl border border-pink-200 max-w-full">
+              <Baby className="w-4 h-4 shrink-0 text-slate-950" />
+              <span className="truncate">
+                {reasonText} por {turnsText}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* SICK OVERLAY BADGE */}
       {card.isSick && !isFired && !card.isPregnant && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-25 pointer-events-none">
           <div className="flex items-center gap-1 bg-emerald-600/95 text-white px-2 py-0.5 rounded font-bold text-[10px] shadow-lg border border-emerald-300 whitespace-nowrap">
-            🤧 DOENTE (QUARENTENA)
+            <Activity className="w-3 h-3 text-white" /> DOENTE (QUARENTENA)
           </div>
         </div>
       )}
 
-      {/* STUNNED / BLOCKED OVERLAY */}
-      {card.isStunned && !card.isPregnant && !isFired && (
-        <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none">
-          <div className="flex items-center gap-1.5 bg-yellow-500/90 text-slate-950 px-3 py-1 rounded-md font-bold text-xs">
-            <Lock className="w-4 h-4" /> ATORDOADO (INATIVO)
+      {/* STUNNED / BLOCKED / AUSENTE OVERLAY */}
+      {card.isStunned && !card.isPregnant && !isFired && (() => {
+        const rounds = card.stunnedRounds !== undefined && card.stunnedRounds > 0 ? card.stunnedRounds : 1;
+        const turnsText = rounds === 1 ? '1 turno' : `${rounds} turnos`;
+        const reasonText = card.stunReason || (card.pjBlocked ? 'Baixa Demanda' : 'Ausente');
+        const icon = getEventStatusIcon(reasonText, eventName);
+
+        return (
+          <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center z-20 pointer-events-none p-2 text-center">
+            <div className="flex items-center gap-1.5 bg-yellow-400 text-slate-950 px-2.5 py-1.5 rounded-lg font-black text-xs shadow-xl border border-yellow-200 animate-pulse max-w-full">
+              {icon}
+              <span className="truncate">
+                {reasonText} por {turnsText}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* EVENT OVERLAY ANIMATION BANNER */}
       {isAffectedByEvent && !isFired && (
         <div className="absolute top-1.5 inset-x-1.5 z-35 pointer-events-none flex items-center justify-center animate-bounce">
-          <div className="bg-gradient-to-r from-lime-500 via-emerald-500 to-lime-500 text-slate-950 font-black text-[9px] sm:text-[11px] uppercase px-2 py-0.5 rounded border border-lime-200 shadow-[0_0_15px_rgba(163,230,53,0.9)] text-center tracking-wider truncate max-w-full drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-            ⚡ {eventName ? eventName.replace(/^[^\w\s]+/, '').replace(/^EVENTO:\s*/i, '').trim() : 'EVENTO ATIVO'}
+          <div className="bg-gradient-to-r from-lime-400 via-emerald-400 to-lime-400 text-slate-950 font-black text-[9px] sm:text-[11px] uppercase px-2.5 py-1 rounded-md border border-lime-200 shadow-[0_0_15px_rgba(163,230,53,0.9)] flex items-center gap-1.5 max-w-full drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+            {getEventStatusIcon(card.stunReason, eventName)}
+            <span className="truncate">
+              {eventName ? eventName.replace(/^[^\w\s]+/, '').replace(/^EVENTO:\s*/i, '').trim() : 'EVENTO ATIVO'}
+            </span>
           </div>
         </div>
       )}
