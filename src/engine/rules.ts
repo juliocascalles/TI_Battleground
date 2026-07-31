@@ -169,3 +169,138 @@ export function getActualCardCost(card: GameCard, player: PlayerState): number {
   const extraCost = (player.extraCoffeeCostRounds > 0 && card.gender === 'M') ? 1 : 0;
   return Math.max(1, card.cost + extraCost);
 }
+
+/**
+ * Removes a buff (atkAdd, defAdd) from a card, reducing defenseBuff first, then base defense if needed.
+ */
+export function removeBuffFromCard(card: GameCard, atkAdd: number, defAdd: number): GameCard {
+  const updated = { ...card };
+  updated.attackBuff = Math.max(0, updated.attackBuff - atkAdd);
+
+  let remainingDefToRemove = defAdd;
+  if (updated.defenseBuff > 0) {
+    if (updated.defenseBuff >= remainingDefToRemove) {
+      updated.defenseBuff -= remainingDefToRemove;
+      remainingDefToRemove = 0;
+    } else {
+      remainingDefToRemove -= updated.defenseBuff;
+      updated.defenseBuff = 0;
+    }
+  }
+
+  if (remainingDefToRemove > 0) {
+    updated.defense -= remainingDefToRemove;
+  }
+
+  return updated;
+}
+
+/**
+ * Processes board card removals with cascade elimination.
+ * If any removed card had 'buff', removes that buff from remaining allies.
+ * If removing the buff causes any ally's effective defense to reach <= 0, that ally is also eliminated.
+ */
+export function removeCardsWithCascade(
+  board: GameCard[],
+  initialDeadIds: string[]
+): {
+  survivingBoard: GameCard[];
+  allFiredCards: GameCard[];
+} {
+  let currentBoard = [...board];
+  const deadMap = new Set<string>(initialDeadIds);
+  const firedCards: GameCard[] = [];
+
+  for (const card of currentBoard) {
+    if (deadMap.has(card.instanceId)) {
+      firedCards.push(card);
+    }
+  }
+
+  const deadQueue = [...firedCards];
+  currentBoard = currentBoard.filter(c => !deadMap.has(c.instanceId));
+
+  while (deadQueue.length > 0) {
+    const deadCard = deadQueue.shift()!;
+
+    if (deadCard.modifiers.includes('buff')) {
+      const atkAdd = deadCard.buffAttackValue ?? 1;
+      const defAdd = deadCard.buffDefenseValue ?? 1;
+
+      const nextBoard: GameCard[] = [];
+      for (const card of currentBoard) {
+        const updatedCard = removeBuffFromCard(card, atkAdd, defAdd);
+        if (getEffectiveDefense(updatedCard) <= 0) {
+          deadMap.add(updatedCard.instanceId);
+          firedCards.push(updatedCard);
+          deadQueue.push(updatedCard);
+        } else {
+          nextBoard.push(updatedCard);
+        }
+      }
+      currentBoard = nextBoard;
+    }
+  }
+
+  return {
+    survivingBoard: currentBoard,
+    allFiredCards: firedCards,
+  };
+}
+
+/**
+ * Grants 2 new modifiers to a card that reached 3 turns on board (Tempo de Serviço).
+ * If 'buff' is among the new modifiers, immediately applies buff to all ally board cards.
+ */
+export function grantTempoDeServicoBonus(
+  card: GameCard,
+  allyBoard: GameCard[]
+): {
+  updatedCard: GameCard;
+  updatedAllyBoard: GameCard[];
+  newModifiers: import('../types').CardModifier[];
+} {
+  const allPossible: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
+  
+  const missing = allPossible.filter(m => !card.modifiers.includes(m));
+  
+  let newMods: import('../types').CardModifier[] = [];
+  if (missing.length >= 2) {
+    const shuffled = [...missing].sort(() => Math.random() - 0.5);
+    newMods = [shuffled[0], shuffled[1]];
+  } else if (missing.length === 1) {
+    const remaining = allPossible.filter(m => m !== missing[0]);
+    const randomExisting = remaining[Math.floor(Math.random() * remaining.length)];
+    newMods = [missing[0], randomExisting];
+  } else {
+    const shuffled = [...allPossible].sort(() => Math.random() - 0.5);
+    newMods = [shuffled[0], shuffled[1]];
+  }
+
+  const updatedModifiers = [...card.modifiers, ...newMods];
+  let updatedCard: GameCard = {
+    ...card,
+    modifiers: updatedModifiers,
+    hasServiceBonus: true,
+  };
+
+  if (newMods.includes('protecao')) {
+    updatedCard.hasProtection = true;
+  }
+
+  let updatedAllyBoard = [...allyBoard];
+
+  if (newMods.includes('buff')) {
+    if (!updatedCard.buffAttackValue && !updatedCard.buffDefenseValue) {
+      updatedCard.buffAttackValue = Math.floor(Math.random() * 3) + 1;
+      updatedCard.buffDefenseValue = Math.floor(Math.random() * 3) + 1;
+    }
+    updatedAllyBoard = applyPlayBuff(updatedCard, updatedAllyBoard);
+  }
+
+  return {
+    updatedCard,
+    updatedAllyBoard,
+    newModifiers: newMods,
+  };
+}

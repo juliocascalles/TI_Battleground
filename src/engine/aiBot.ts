@@ -1,5 +1,5 @@
 import { PlayerState, GameCard, AttackAnimation } from '../types';
-import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, getMaxAttacksAllowed, getEffectiveAttack, getEffectiveDefense } from './rules';
+import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, getMaxAttacksAllowed, getEffectiveAttack, getEffectiveDefense, removeCardsWithCascade } from './rules';
 
 export interface AiTurnResult {
   updatedComputer: PlayerState;
@@ -108,27 +108,17 @@ export function executeAiTurn(
 
       combatsExecuted.push(animation);
 
-      // Check if sick card quarantine is triggered
-      const isQuarantine = attacker.isSick || defender.isSick;
-
       // Update computer board state
       const atkIndex = computer.board.findIndex(c => c.instanceId === attacker.instanceId);
       if (atkIndex !== -1) {
         if (getEffectiveDefense(updatedAttacker) <= 0) {
-          computer.board.splice(atkIndex, 1);
-          computer.firedCount += 1;
+          const res = removeCardsWithCascade(computer.board, [attacker.instanceId]);
+          computer.board = res.survivingBoard;
+          computer.firedCount += res.allFiredCards.length;
           actionsLog.push(`💥 ${attacker.name} do Computador foi demitido durante o contra-ataque de ${defender.name}!`);
-        } else if (isQuarantine) {
-          computer.board.splice(atkIndex, 1);
-          quarantinedCards.push({
-            ...updatedAttacker,
-            defense: updatedAttacker.maxDefense,
-            isSick: false,
-            attackBuff: 0,
-            defenseBuff: 0,
-            isStunned: false,
-            pjBlocked: false,
-          });
+          if (res.allFiredCards.length > 1) {
+            actionsLog.push(`⚠️ DEMISSÃO EM CADEIA! A perda do buff demitiu ${res.allFiredCards.length - 1} colega(s) do Computador.`);
+          }
         } else {
           computer.board[atkIndex] = updatedAttacker;
         }
@@ -138,28 +128,21 @@ export function executeAiTurn(
       const defIndex = player.board.findIndex(c => c.instanceId === defender.instanceId);
       if (defIndex !== -1) {
         if (getEffectiveDefense(updatedDefender) <= 0) {
-          player.board.splice(defIndex, 1);
-          player.firedCount += 1;
+          const res = removeCardsWithCascade(player.board, [defender.instanceId]);
+          player.board = res.survivingBoard;
+          player.firedCount += res.allFiredCards.length;
           actionsLog.push(`🔥 ${attacker.name} do Computador atacou e DEMITIU ${defender.name} do Jogador!`);
-        } else if (isQuarantine) {
-          player.board.splice(defIndex, 1);
-          quarantinedCards.push({
-            ...updatedDefender,
-            defense: updatedDefender.maxDefense,
-            isSick: false,
-            attackBuff: 0,
-            defenseBuff: 0,
-            isStunned: false,
-            pjBlocked: false,
-          });
+          if (res.allFiredCards.length > 1) {
+            actionsLog.push(`⚠️ DEMISSÃO EM CADEIA! A perda do buff demitiu ${res.allFiredCards.length - 1} colega(s) do Jogador.`);
+          }
         } else {
           player.board[defIndex] = updatedDefender;
           actionsLog.push(`⚔️ ${attacker.name} atacou ${defender.name} (Dano trocado: ${animation.damageToDefender} / ${animation.damageToAttacker}).`);
         }
       }
 
-      if (isQuarantine) {
-        actionsLog.push(`😷 QUARENTENA! ${attacker.name} e ${defender.name} foram enviados de volta ao baralho.`);
+      if (updatedAttacker.isSick || updatedDefender.isSick) {
+        actionsLog.push(`😷 GRIPE TRANSMITIDA! O vírus da gripe foi contraído/transmitido durante o combate.`);
       }
     }
   } else {

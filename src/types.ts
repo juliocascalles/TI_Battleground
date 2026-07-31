@@ -38,6 +38,8 @@ export interface GameCard {
   isPregnant?: boolean; // From Gravidez event
   pregnantRounds?: number;
   isSick?: boolean; // From Epidemia de Gripe event
+  turnsOnBoard?: number; // Track rounds card has been working on board
+  hasServiceBonus?: boolean; // Granted after 3 turns on board
   avatarSvg: string;
   quote: string;
   owner: 'player' | 'computer';
@@ -61,6 +63,7 @@ export type EventType =
   | 'gripe'
   | 'gravidez'
   | 'baixa_demanda'
+  | 'tempo_servico'
   | 'outros_imprevistos';
 
 export interface GlobalEvent {

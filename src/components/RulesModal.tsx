@@ -98,22 +98,53 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             </div>
           </section>
 
-          <section className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+          <section className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
             <h3 className="font-bold text-lime-400 text-base flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-lime-400" /> Terminal de Eventos Globais
+              <Terminal className="w-4 h-4 text-lime-400" /> Terminal de Eventos Globais & Regras Avançadas
             </h3>
             <p className="text-xs text-slate-300">
-              A cada turno sem evento, a chance de um imprevisto corporativo aumenta!
+              <strong className="text-amber-300">Escopo dos Eventos:</strong> Os eventos corporativos só têm efeito sobre os personagens que estão <strong className="text-white">trabalhando na mesa</strong> (comprados e colocados em campo).
             </p>
-            <div className="flex flex-wrap gap-1.5 text-[11px] text-lime-300">
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🚨 Layoff</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🐛 Bug em Produção</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🚆 Problema nos Trens</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🏠 Enchente</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🍼 Virou papai! (Machos)</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🤧 Epidemia de Gripe</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">🤰 Licença Maternidade (Fem)</span>
-              <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">📉 Baixa Demanda (PJ)</span>
+            <p className="text-xs text-slate-300">
+              <strong className="text-rose-400">Demissão em Cadeia (Morte de Buff):</strong> Quando uma carta com bônus de Buff morre, seu buff é removido dos colegas. Se isso diminuir a defesa total de algum colega para 0 ou menos, ele é <strong className="text-rose-400">DEMITIDO</strong> imediatamente em cadeia!
+            </p>
+
+            <div className="space-y-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
+              <div>
+                <strong className="text-cyan-300">🎖️ Tempo de Serviço:</strong> Cartas que permanecem em jogo (na mesa) por 3 turnos ganham <strong className="text-white">2 novos modificadores</strong>. Se um dos modificadores for Buff, o bônus é aplicado imediatamente aos colegas!
+              </div>
+
+              <div>
+                <strong className="text-rose-400">🚨 Layoff em Massa:</strong> Corte de gastos! Todas as cartas na mesa sofrem 2 pontos de dano e reavaliam demissão.
+              </div>
+
+              <div>
+                <strong className="text-amber-400">🤧 Epidemia de Gripe:</strong> Uma carta na mesa fica doente (-1 de Ataque). Toda carta que entrar em contato em combate contra ela também é infectada e perde 1 ponto de ataque.
+              </div>
+
+              <div>
+                <strong className="text-purple-300">🤰 Gravidez (Licença Maternidade):</strong> Afeta uma carta feminina na mesa. Se CLT: entra em licença por 3 rodadas inativa. Se Contrato PJ: o contrato é rescindido e a carta volta ao baralho.
+              </div>
+
+              <div>
+                <strong className="text-blue-300">🍼 Virou Papai!:</strong> Uma carta masculina na mesa vai cuidar do bebê e volta ao baralho com <strong className="text-amber-300">Custo de Café +1</strong>.
+              </div>
+
+              <div>
+                <strong className="text-amber-300">🐛 Bug em Produção:</strong> Perde 1 ponto de Café para cada Estagiário ou Gerente de T.I. em campo.
+              </div>
+
+              <div>
+                <strong className="text-yellow-400">🚆 Problema nos Trens:</strong> Falha no transporte inativa as cartas na mesa por 1 turno de ataque.
+              </div>
+
+              <div>
+                <strong className="text-emerald-400">🏠 Enchente (Home-Office Forçado):</strong> Ganhe +3 de Café extra economizando deslocamento.
+              </div>
+
+              <div>
+                <strong className="text-rose-300">📉 Baixa Demanda nos Contratos:</strong> Cartas com a tag Contrato PJ na mesa ficam inativas por 1 rodada.
+              </div>
             </div>
           </section>
         </div>

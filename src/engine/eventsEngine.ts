@@ -1,5 +1,5 @@
 import { EventType, GlobalEvent, PlayerState, GameCard } from '../types';
-import { applyDamageToCard } from './rules';
+import { applyDamageToCard, removeCardsWithCascade, grantTempoDeServicoBonus } from './rules';
 
 export const ALL_EVENT_TYPES: EventType[] = [
   'layoff',
@@ -10,6 +10,7 @@ export const ALL_EVENT_TYPES: EventType[] = [
   'gripe',
   'gravidez',
   'baixa_demanda',
+  'tempo_servico',
   'outros_imprevistos',
 ];
 
@@ -46,28 +47,32 @@ export function triggerRandomEvent(
 
   let candidateTypes = [...ALL_EVENT_TYPES];
 
-  // Helper lists of characters in play (board + hand)
-  const allMaleInPlay = [
-    ...updatedPlayer.board, ...updatedPlayer.hand,
-    ...updatedComputer.board, ...updatedComputer.hand
+  // Helper lists of characters working on the board ONLY
+  const allMaleOnBoard = [
+    ...updatedPlayer.board,
+    ...updatedComputer.board
   ].filter(c => c.gender === 'M');
 
-  const allFemaleInPlay = [
-    ...updatedPlayer.board, ...updatedPlayer.hand,
-    ...updatedComputer.board, ...updatedComputer.hand
+  const allFemaleOnBoard = [
+    ...updatedPlayer.board,
+    ...updatedComputer.board
   ].filter(c => c.gender === 'F');
 
   // Candidate condition filters
-  if (allMaleInPlay.length === 0) {
+  if (allMaleOnBoard.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'pai_recem_nascido');
   }
 
-  if (allFemaleInPlay.length === 0) {
+  if (allFemaleOnBoard.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'gravidez');
   }
 
   if (updatedPlayer.board.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'gripe');
+  }
+
+  if (updatedPlayer.board.length === 0 && updatedComputer.board.length === 0) {
+    candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico' && t !== 'layoff' && t !== 'baixa_demanda');
   }
 
   const selectedType = candidateTypes[Math.floor(Math.random() * candidateTypes.length)];
@@ -87,6 +92,21 @@ export function triggerRandomEvent(
 
       updatedPlayer.board = updatedPlayer.board.map(c => applyDamageToCard(c, 2));
       updatedComputer.board = updatedComputer.board.map(c => applyDamageToCard(c, 2));
+
+      // Process cascade deaths from layoff damage
+      const pDeadIds = updatedPlayer.board.filter(c => c.defense <= 0).map(c => c.instanceId);
+      if (pDeadIds.length > 0) {
+        const pRes = removeCardsWithCascade(updatedPlayer.board, pDeadIds);
+        updatedPlayer.board = pRes.survivingBoard;
+        updatedPlayer.firedCount += pRes.allFiredCards.length;
+      }
+
+      const cDeadIds = updatedComputer.board.filter(c => c.defense <= 0).map(c => c.instanceId);
+      if (cDeadIds.length > 0) {
+        const cRes = removeCardsWithCascade(updatedComputer.board, cDeadIds);
+        updatedComputer.board = cRes.survivingBoard;
+        updatedComputer.firedCount += cRes.allFiredCards.length;
+      }
       break;
     }
 
@@ -111,8 +131,8 @@ export function triggerRandomEvent(
 
     case 'problema_trens': {
       title = '🚆 EVENTO: PROBLEMA NOS TRENS!';
-      description = 'Falha na linha de trem/metrô! As cartas compradas/contratadas ficam inativas, perdendo um turno de ataque.';
-      logMessage = `[${timestamp}] NOTICE: PROBLEMA NOS TRENS! Cartas contratadas na mesa de todos os jogadores inativas por 1 turno.`;
+      description = 'Falha na linha de trem/metrô! As cartas contratadas na mesa ficam inativas, perdendo um turno de ataque.';
+      logMessage = `[${timestamp}] NOTICE: PROBLEMA NOS TRENS! Cartas na mesa de todos os jogadores inativas por 1 turno.`;
 
       updatedPlayer.board = updatedPlayer.board.map(c => ({
         ...c,
@@ -140,26 +160,25 @@ export function triggerRandomEvent(
 
     case 'pai_recem_nascido': {
       title = '🍼 EVENTO: VIROU PAPAI!';
-      description = 'Noites em claro trocando fraldas! Uma carta de personagem masculino foi sorteada, voltando ao baralho com Custo +1 de Café.';
+      description = 'Noites em claro trocando fraldas! Uma carta de personagem masculino trabalhando na mesa volta ao baralho com Custo +1 de Café.';
 
-      if (allMaleInPlay.length > 0) {
-        const chosenMale = allMaleInPlay[Math.floor(Math.random() * allMaleInPlay.length)];
+      if (allMaleOnBoard.length > 0) {
+        const chosenMale = allMaleOnBoard[Math.floor(Math.random() * allMaleOnBoard.length)];
 
-        const removeCard = (state: PlayerState) => {
-          const bIdx = state.board.findIndex(c => c.instanceId === chosenMale.instanceId);
-          if (bIdx !== -1) {
-            state.board.splice(bIdx, 1);
-            return true;
+        // Remove chosen male from player or computer board
+        const pIdx = updatedPlayer.board.findIndex(c => c.instanceId === chosenMale.instanceId);
+        if (pIdx !== -1) {
+          const res = removeCardsWithCascade(updatedPlayer.board, [chosenMale.instanceId]);
+          updatedPlayer.board = res.survivingBoard;
+          updatedPlayer.firedCount += Math.max(0, res.allFiredCards.length - 1);
+        } else {
+          const cIdx = updatedComputer.board.findIndex(c => c.instanceId === chosenMale.instanceId);
+          if (cIdx !== -1) {
+            const res = removeCardsWithCascade(updatedComputer.board, [chosenMale.instanceId]);
+            updatedComputer.board = res.survivingBoard;
+            updatedComputer.firedCount += Math.max(0, res.allFiredCards.length - 1);
           }
-          const hIdx = state.hand.findIndex(c => c.instanceId === chosenMale.instanceId);
-          if (hIdx !== -1) {
-            state.hand.splice(hIdx, 1);
-            return true;
-          }
-          return false;
-        };
-
-        removeCard(updatedPlayer) || removeCard(updatedComputer);
+        }
 
         const returnedCard: GameCard = {
           ...chosenMale,
@@ -176,9 +195,9 @@ export function triggerRandomEvent(
         };
 
         updatedDeck.push(returnedCard);
-        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! ${chosenMale.name} voltou ao baralho com Custo de Café +1 (Novo custo: ${returnedCard.cost}).`;
+        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! ${chosenMale.name} saiu da mesa e voltou ao baralho com Custo de Café +1 (Novo custo: ${returnedCard.cost}).`;
       } else {
-        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! Nenhum personagem masculino em jogo no momento.`;
+        logMessage = `[${timestamp}] NOTICE: VIROU PAPAI! Nenhum personagem masculino na mesa no momento.`;
       }
       break;
     }
@@ -205,17 +224,17 @@ export function triggerRandomEvent(
 
     case 'gravidez': {
       title = '🤰 EVENTO: GRAVIDEZ?';
-      description = 'Uma carta de personagem feminino foi sorteada. Se CLT, entra em licença maternidade (3 rodadas inativa); se PJ, volta ao baralho.';
+      description = 'Uma carta de personagem feminino trabalhando na mesa foi sorteada. Se CLT, entra em licença maternidade (3 rodadas inativa); se PJ, volta ao baralho.';
 
-      if (allFemaleInPlay.length > 0) {
-        const chosenFemale = allFemaleInPlay[Math.floor(Math.random() * allFemaleInPlay.length)];
+      if (allFemaleOnBoard.length > 0) {
+        const chosenFemale = allFemaleOnBoard[Math.floor(Math.random() * allFemaleOnBoard.length)];
 
         if (!chosenFemale.isPJ) {
-          const markPregnant = (cList: GameCard[]) => {
-            const idx = cList.findIndex(c => c.instanceId === chosenFemale.instanceId);
+          const markPregnant = (board: GameCard[]) => {
+            const idx = board.findIndex(c => c.instanceId === chosenFemale.instanceId);
             if (idx !== -1) {
-              cList[idx] = {
-                ...cList[idx],
+              board[idx] = {
+                ...board[idx],
                 isPregnant: true,
                 pregnantRounds: 3,
                 isStunned: true,
@@ -225,27 +244,24 @@ export function triggerRandomEvent(
             }
           };
           markPregnant(updatedPlayer.board);
-          markPregnant(updatedPlayer.hand);
           markPregnant(updatedComputer.board);
-          markPregnant(updatedComputer.hand);
 
           logMessage = `[${timestamp}] NOTICE: LICENÇA MATERNIDADE! ${chosenFemale.name} (CLT) está em licença maternidade por 3 rodadas.`;
         } else {
-          const removeCard = (state: PlayerState) => {
-            const bIdx = state.board.findIndex(c => c.instanceId === chosenFemale.instanceId);
-            if (bIdx !== -1) {
-              state.board.splice(bIdx, 1);
-              return true;
+          // Female PJ card on board: rescinds contract, returns to deck!
+          const pIdx = updatedPlayer.board.findIndex(c => c.instanceId === chosenFemale.instanceId);
+          if (pIdx !== -1) {
+            const res = removeCardsWithCascade(updatedPlayer.board, [chosenFemale.instanceId]);
+            updatedPlayer.board = res.survivingBoard;
+            updatedPlayer.firedCount += Math.max(0, res.allFiredCards.length - 1);
+          } else {
+            const cIdx = updatedComputer.board.findIndex(c => c.instanceId === chosenFemale.instanceId);
+            if (cIdx !== -1) {
+              const res = removeCardsWithCascade(updatedComputer.board, [chosenFemale.instanceId]);
+              updatedComputer.board = res.survivingBoard;
+              updatedComputer.firedCount += Math.max(0, res.allFiredCards.length - 1);
             }
-            const hIdx = state.hand.findIndex(c => c.instanceId === chosenFemale.instanceId);
-            if (hIdx !== -1) {
-              state.hand.splice(hIdx, 1);
-              return true;
-            }
-            return false;
-          };
-
-          removeCard(updatedPlayer) || removeCard(updatedComputer);
+          }
 
           const returnedCard: GameCard = {
             ...chosenFemale,
@@ -264,7 +280,7 @@ export function triggerRandomEvent(
           logMessage = `[${timestamp}] NOTICE: GRAVIDEZ (PJ)! ${chosenFemale.name} (Contrato PJ) rescindiu contrato e voltou ao baralho.`;
         }
       } else {
-        logMessage = `[${timestamp}] NOTICE: GRAVIDEZ? Nenhum personagem feminino em jogo no momento.`;
+        logMessage = `[${timestamp}] NOTICE: GRAVIDEZ? Nenhum personagem feminino na mesa no momento.`;
       }
       break;
     }
@@ -272,7 +288,7 @@ export function triggerRandomEvent(
     case 'baixa_demanda': {
       title = '📉 EVENTO: BAIXA DEMANDA NOS CONTRATOS!';
       description = 'Corte de consultores! Cartas com a tag "Contrato PJ" em campo ficam inativas por 1 rodada.';
-      logMessage = `[${timestamp}] WARN: BAIXA DEMANDA! Cartas com tag Contrato PJ inativas por 1 rodada.`;
+      logMessage = `[${timestamp}] WARN: BAIXA DEMANDA! Cartas com tag Contrato PJ na mesa inativas por 1 rodada.`;
 
       updatedPlayer.board = updatedPlayer.board.map(c => c.isPJ ? {
         ...c,
@@ -291,6 +307,38 @@ export function triggerRandomEvent(
         stunnedRounds: Math.max(c.stunnedRounds || 0, 1),
         stunReason: 'Baixa Demanda',
       } : c);
+      break;
+    }
+
+    case 'tempo_servico': {
+      title = '🎖️ EVENTO: RECONHECIMENTO DE TEMPO DE SERVIÇO!';
+      description = 'Promoção e tempo de casa! Uma carta veterana na mesa ganha 2 novos modificadores (e se ganhar Buff, aplica imediatamente aos colegas)!';
+
+      const allBoardCards = [...updatedPlayer.board, ...updatedComputer.board];
+      if (allBoardCards.length > 0) {
+        // Pick card with highest turnsOnBoard or random
+        const candidateCard = [...allBoardCards].sort((a, b) => (b.turnsOnBoard || 0) - (a.turnsOnBoard || 0))[0];
+
+        const isPlayer = updatedPlayer.board.some(c => c.instanceId === candidateCard.instanceId);
+        const ownerState = isPlayer ? updatedPlayer : updatedComputer;
+        const cardIndex = ownerState.board.findIndex(c => c.instanceId === candidateCard.instanceId);
+
+        if (cardIndex !== -1) {
+          const target = ownerState.board[cardIndex];
+          const allyBoard = ownerState.board.filter((_, i) => i !== cardIndex);
+          const { updatedCard, updatedAllyBoard, newModifiers } = grantTempoDeServicoBonus(target, allyBoard);
+
+          ownerState.board = [
+            ...updatedAllyBoard.slice(0, cardIndex),
+            updatedCard,
+            ...updatedAllyBoard.slice(cardIndex)
+          ];
+
+          logMessage = `[${timestamp}] SUCCESS: TEMPO DE SERVIÇO! ${candidateCard.name} do ${isPlayer ? 'Jogador' : 'Computador'} ganhou 2 novos modificadores: ${newModifiers.join(', ')}!`;
+        }
+      } else {
+        logMessage = `[${timestamp}] NOTICE: TEMPO DE SERVIÇO! Nenhuma carta no campo de batalha.`;
+      }
       break;
     }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameCard, PlayerState, GlobalEvent } from '../types';
 import { generateDeck } from '../data/cardsData';
-import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack } from '../engine/rules';
+import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack, removeCardsWithCascade, grantTempoDeServicoBonus } from '../engine/rules';
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
 
@@ -342,22 +342,32 @@ export const GameBoard: React.FC = () => {
     // 3. Wait remaining duration of 3 seconds total pause (2200ms) so human player can read screen and see DEMITIDO! stamp
     await new Promise(r => setTimeout(r, 2200));
 
-    // 4. NOW remove fired cards (defense <= 0)
+    // 4. NOW remove fired cards (defense <= 0) with buff removal cascade
     setPlayer(prev => {
-      const firedInTurn = prev.board.filter(c => getEffectiveDefense(c) <= 0).length;
+      const deadIds = prev.board.filter(c => getEffectiveDefense(c) <= 0).map(c => c.instanceId);
+      if (deadIds.length === 0) return prev;
+      const res = removeCardsWithCascade(prev.board, deadIds);
+      if (res.allFiredCards.length > deadIds.length) {
+        setLogs(l => [...l, `⚠️ DEMISSÃO EM CADEIA (Jogador)! A perda do buff demitiu ${res.allFiredCards.length - deadIds.length} colega(s) adicional(is).`]);
+      }
       return {
         ...prev,
-        board: prev.board.filter(c => getEffectiveDefense(c) > 0),
-        firedCount: prev.firedCount + firedInTurn,
+        board: res.survivingBoard,
+        firedCount: prev.firedCount + res.allFiredCards.length,
       };
     });
 
     setComputer(prev => {
-      const firedInTurn = prev.board.filter(c => getEffectiveDefense(c) <= 0).length;
+      const deadIds = prev.board.filter(c => getEffectiveDefense(c) <= 0).map(c => c.instanceId);
+      if (deadIds.length === 0) return prev;
+      const res = removeCardsWithCascade(prev.board, deadIds);
+      if (res.allFiredCards.length > deadIds.length) {
+        setLogs(l => [...l, `⚠️ DEMISSÃO EM CADEIA (Computador)! A perda do buff demitiu ${res.allFiredCards.length - deadIds.length} colega(s) adicional(is).`]);
+      }
       return {
         ...prev,
-        board: prev.board.filter(c => getEffectiveDefense(c) > 0),
-        firedCount: prev.firedCount + firedInTurn,
+        board: res.survivingBoard,
+        firedCount: prev.firedCount + res.allFiredCards.length,
       };
     });
 
@@ -396,21 +406,18 @@ export const GameBoard: React.FC = () => {
     setSelectedBoardCardId(prev => prev === defender.instanceId ? null : defender.instanceId);
   };
 
-  // --- END PLAYER TURN & TRIGGER AI TURN ---
-  const handleEndTurn = async () => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
-
-    setIsAnimating(true);
-
-    // Reset player attack counters and tick card status durations
-    const resetPlayerBoard = player.board.map(c => {
+  // Helper to tick board cards turn stats and check Tempo de Serviço (3 turns on board)
+  const processBoardCardsTurn = (board: GameCard[], logPrefix: string): GameCard[] => {
+    let updatedBoard: GameCard[] = board.map(c => {
       const stunnedRounds = Math.max(0, (c.stunnedRounds !== undefined ? c.stunnedRounds : c.isStunned ? 1 : 0) - 1);
       const pjBlockedRounds = Math.max(0, (c.pjBlockedRounds !== undefined ? c.pjBlockedRounds : c.pjBlocked ? 1 : 0) - 1);
       const pregnantRounds = Math.max(0, (c.pregnantRounds !== undefined ? c.pregnantRounds : c.isPregnant ? 1 : 0) - 1);
+      const turnsOnBoard = (c.turnsOnBoard || 0) + 1;
 
-      return {
+      const item: GameCard = {
         ...c,
         hasAttackedThisTurn: 0,
+        turnsOnBoard,
         stunnedRounds,
         isStunned: stunnedRounds > 0,
         stunReason: stunnedRounds > 0 ? c.stunReason : undefined,
@@ -419,7 +426,37 @@ export const GameBoard: React.FC = () => {
         pregnantRounds,
         isPregnant: pregnantRounds > 0,
       };
+      return item;
     });
+
+    // Check Tempo de Serviço for cards with turnsOnBoard >= 3 and !hasServiceBonus
+    for (let i = 0; i < updatedBoard.length; i++) {
+      const card = updatedBoard[i];
+      if ((card.turnsOnBoard || 0) >= 3 && !card.hasServiceBonus) {
+        const allyBoard = updatedBoard.filter((_, idx) => idx !== i);
+        const { updatedCard, updatedAllyBoard, newModifiers } = grantTempoDeServicoBonus(card, allyBoard);
+        
+        updatedBoard = [
+          ...updatedAllyBoard.slice(0, i),
+          updatedCard,
+          ...updatedAllyBoard.slice(i)
+        ];
+
+        setLogs(prev => [...prev, `🎖️ TEMPO DE SERVIÇO (${logPrefix})! ${card.name} completou 3 turnos na mesa e ganhou 2 novos modificadores (${newModifiers.join(', ')}).`]);
+      }
+    }
+
+    return updatedBoard;
+  };
+
+  // --- END PLAYER TURN & TRIGGER AI TURN ---
+  const handleEndTurn = async () => {
+    if (currentTurnOwner !== 'player' || isAnimating) return;
+
+    setIsAnimating(true);
+
+    // Reset player attack counters, tick card status durations, and increment turnsOnBoard
+    const resetPlayerBoard = processBoardCardsTurn(player.board, 'Jogador');
 
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
@@ -619,25 +656,14 @@ export const GameBoard: React.FC = () => {
         canPlayCardsThisTurn: true,
         drawBlockedRounds: drawBlocked,
         extraCoffeeCostRounds: Math.max(0, prevP.extraCoffeeCostRounds - 1),
-        board: prevP.board.map(c => {
-          const stunnedRounds = Math.max(0, (c.stunnedRounds !== undefined ? c.stunnedRounds : c.isStunned ? 1 : 0) - 1);
-          const pjBlockedRounds = Math.max(0, (c.pjBlockedRounds !== undefined ? c.pjBlockedRounds : c.pjBlocked ? 1 : 0) - 1);
-          const pregnantRounds = Math.max(0, (c.pregnantRounds !== undefined ? c.pregnantRounds : c.isPregnant ? 1 : 0) - 1);
-
-          return {
-            ...c,
-            hasAttackedThisTurn: 0,
-            stunnedRounds,
-            isStunned: stunnedRounds > 0,
-            stunReason: stunnedRounds > 0 ? c.stunReason : undefined,
-            pjBlockedRounds,
-            pjBlocked: pjBlockedRounds > 0,
-            pregnantRounds,
-            isPregnant: pregnantRounds > 0,
-          };
-        }),
+        board: processBoardCardsTurn(prevP.board, 'Jogador'),
       };
     });
+
+    setComputer(prevC => ({
+      ...prevC,
+      board: processBoardCardsTurn(prevC.board, 'Computador'),
+    }));
 
     setLogs(prev => [...prev, '👉 SEU TURNO! Ganhou +2 Café.']);
     setIsAnimating(false);
@@ -659,7 +685,7 @@ export const GameBoard: React.FC = () => {
               TI BATTLEGROUND
             </h1>
             <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300/80 bg-slate-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
-              v1.2026.07.30
+              v1.2026.07.31
             </span>
           </div>
           <span className="hidden sm:inline text-xs font-mono text-slate-400">
