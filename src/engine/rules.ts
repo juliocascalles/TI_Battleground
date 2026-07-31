@@ -1,4 +1,5 @@
 import { GameCard, PlayerState, AttackAnimation } from '../types';
+import { pickWeightedModifiers } from '../data/cardsData';
 
 /**
  * Checks if a target defender card is valid under the Priority (Prioridade) rule.
@@ -275,26 +276,18 @@ export function grantTempoDeServicoBonus(
   updatedAllyBoard: GameCard[];
   newModifiers: import('../types').CardModifier[];
 } {
-  // Requirement 2: Proteção modifier can ONLY be given to cards with attack < 6
-  const effectiveAtk = card.attack + card.attackBuff;
-  let allPossible: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
-  if (card.attack >= 6 || effectiveAtk >= 6) {
-    allPossible = allPossible.filter(m => m !== 'protecao');
-  }
+  const effectiveAtk = Math.max(card.attack, card.attack + card.attackBuff);
+  const possibleModifiers: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
   
-  const missing = allPossible.filter(m => !card.modifiers.includes(m));
-  
-  let newMods: import('../types').CardModifier[] = [];
-  if (missing.length >= 2) {
-    const shuffled = [...missing].sort(() => Math.random() - 0.5);
-    newMods = [shuffled[0], shuffled[1]];
-  } else if (missing.length === 1) {
-    const remaining = allPossible.filter(m => m !== missing[0]);
-    const randomExisting = remaining[Math.floor(Math.random() * remaining.length)];
-    newMods = [missing[0], randomExisting];
-  } else {
-    const shuffled = [...allPossible].sort(() => Math.random() - 0.5);
-    newMods = [shuffled[0], shuffled[1]];
+  // Prefer modifiers not already present on the card
+  const candidates = possibleModifiers.filter(m => !card.modifiers.includes(m));
+  let newMods = pickWeightedModifiers(candidates, 2, effectiveAtk);
+
+  // Fallback if missing candidates were fewer than 2
+  if (newMods.length < 2) {
+    const allowed = possibleModifiers.filter(m => !newMods.includes(m));
+    const extra = pickWeightedModifiers(allowed, 2 - newMods.length, effectiveAtk);
+    newMods.push(...extra);
   }
 
   const updatedModifiers = [...card.modifiers, ...newMods];

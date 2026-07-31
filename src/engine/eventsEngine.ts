@@ -214,23 +214,35 @@ export function triggerRandomEvent(
 
     case 'gripe': {
       title = '🤧 EVENTO: EPIDEMIA DE GRIPE!';
-      description = 'Surto de virose no escritório! Uma carta na mesa fica doente (-1 de Ataque). Toda carta que entrar em contato com ela em combate também ficará doente!';
+      description = 'Surto de virose no escritório! Pelo menos 3 personagens em jogo ficam doentes (-1 de Ataque cada). Toda carta que entrar em contato com elas em combate também ficará doente!';
 
       const allOnBoard = [...updatedPlayer.board, ...updatedComputer.board];
       if (allOnBoard.length > 0) {
-        const chosenCard = allOnBoard[Math.floor(Math.random() * allOnBoard.length)];
-        const isPlayer = updatedPlayer.board.some(c => c.instanceId === chosenCard.instanceId);
-        const targetBoard = isPlayer ? updatedPlayer.board : updatedComputer.board;
-        const idx = targetBoard.findIndex(c => c.instanceId === chosenCard.instanceId);
-        if (idx !== -1) {
-          targetBoard[idx] = {
-            ...targetBoard[idx],
-            isSick: true,
-            attack: Math.max(0, targetBoard[idx].attack - 1),
-          };
-          const sickCard = targetBoard[idx];
-          logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do ${isPlayer ? 'Jogador' : 'Computador'} pegou gripe (-1 de Ataque)! Toda carta que entrar em contato com ela ficará infectada.`;
+        // Prioritize non-sick cards first
+        const notSick = allOnBoard.filter(c => !c.isSick).sort(() => Math.random() - 0.5);
+        const alreadySick = allOnBoard.filter(c => c.isSick).sort(() => Math.random() - 0.5);
+        const pool = [...notSick, ...alreadySick];
+        const countToInfect = Math.min(3, pool.length);
+        const infectedNames: string[] = [];
+
+        for (let i = 0; i < countToInfect; i++) {
+          const chosenCard = pool[i];
+          const isPlayer = updatedPlayer.board.some(c => c.instanceId === chosenCard.instanceId);
+          const targetBoard = isPlayer ? updatedPlayer.board : updatedComputer.board;
+          const idx = targetBoard.findIndex(c => c.instanceId === chosenCard.instanceId);
+          if (idx !== -1) {
+            if (!targetBoard[idx].isSick) {
+              targetBoard[idx] = {
+                ...targetBoard[idx],
+                isSick: true,
+                attack: Math.max(0, targetBoard[idx].attack - 1),
+              };
+            }
+            infectedNames.push(`${targetBoard[idx].name} (${isPlayer ? 'Jogador' : 'Computador'})`);
+          }
         }
+
+        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${infectedNames.length} personagem(ns) em jogo (${infectedNames.join(', ')}) pegaram gripe (-1 de Ataque)!`;
       } else {
         logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! Nenhuma carta na mesa no momento para ser infectada.`;
       }

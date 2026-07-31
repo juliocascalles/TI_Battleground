@@ -631,6 +631,11 @@ export const GameBoard: React.FC = () => {
       while (safetyLoop < 5) {
         safetyLoop++;
 
+        // Enforce maximum 5 cards on board limit
+        if (compState.board.length >= 5) {
+          break;
+        }
+
         // Calculate playable cards with local compState
         const playableCards = compState.hand
           .map((card, index) => ({ card, index, actualCost: getActualCardCost(card, compState) }))

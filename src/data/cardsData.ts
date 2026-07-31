@@ -93,6 +93,49 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   }
 ];
 
+export function getModifierWeight(modifier: CardModifier, cardAttack: number): number {
+  if (modifier === 'protecao') {
+    // 50% extra chance for cards with attack < 6; 0 for attack >= 6
+    return cardAttack < 6 ? 1.5 : 0;
+  }
+  if (modifier === 'prioridade') {
+    // Reduced chance
+    return 0.5;
+  }
+  // Standard base chance for buff, ataque_duplo, enfraquecer
+  return 1.0;
+}
+
+export function pickWeightedModifiers(
+  candidates: CardModifier[],
+  count: number,
+  cardAttack: number
+): CardModifier[] {
+  const pool = [...candidates];
+  const selected: CardModifier[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const validCandidates = pool.filter(m => getModifierWeight(m, cardAttack) > 0);
+    if (validCandidates.length === 0) break;
+
+    const totalWeight = validCandidates.reduce((sum, m) => sum + getModifierWeight(m, cardAttack), 0);
+    let rand = Math.random() * totalWeight;
+
+    for (const mod of validCandidates) {
+      const w = getModifierWeight(mod, cardAttack);
+      if (rand < w) {
+        selected.push(mod);
+        const idx = pool.indexOf(mod);
+        if (idx !== -1) pool.splice(idx, 1);
+        break;
+      }
+      rand -= w;
+    }
+  }
+
+  return selected;
+}
+
 export function generateDeck(count: number = 48): GameCard[] {
   const deck: GameCard[] = [];
   const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
@@ -109,18 +152,13 @@ export function generateDeck(count: number = 48): GameCard[] {
     const attack = template.baseAttack;
     const defense = template.baseDefense;
 
-    // Requirement 2: Proteção modifier can ONLY be given to cards with attack < 6
-    const allowedModifiers = attack < 6 ? possibleModifiers : possibleModifiers.filter(m => m !== 'protecao');
-
-    // Assign 0 to 2 random modifiers
+    // Assign 0 to 2 random modifiers using weighted probabilities
     const rand = Math.random();
     const numModifiers = rand < 0.18 ? 2 : rand < 0.78 ? 1 : 0;
     const cardModifiers: CardModifier[] = [];
     if (numModifiers > 0) {
-      const shuffled = [...allowedModifiers].sort(() => 0.5 - Math.random());
-      for (let m = 0; m < numModifiers; m++) {
-        cardModifiers.push(shuffled[m]);
-      }
+      const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, attack);
+      cardModifiers.push(...chosen);
     }
 
     // Determine buff values if 'buff' modifier is present (+0..3 / +0..3, never +0/+0)
