@@ -269,8 +269,20 @@ export const GameBoard: React.FC = () => {
       setLogs(prev => [...prev, '⚠️ Você está impedido de atacar neste turno por evento!']);
       return;
     }
+    if (getEffectiveDefense(card) <= 0) {
+      setLogs(prev => [...prev, '⚠️ Carta demitida não pode atacar!']);
+      return;
+    }
+    if (card.isStunned) {
+      setLogs(prev => [...prev, `⚠️ ${card.name} está inativa neste turno (${card.stunReason || 'Inativa'}) e não pode atacar!`]);
+      return;
+    }
+    if (card.isPregnant) {
+      setLogs(prev => [...prev, `⚠️ ${card.name} está em licença maternidade e não pode atacar!`]);
+      return;
+    }
     if (card.isPJ && card.pjBlocked) {
-      setLogs(prev => [...prev, '⚠️ Esta carta PJ está bloqueada por Baixa Demanda!']);
+      setLogs(prev => [...prev, '⚠️ Esta carta PJ está bloqueada por Baixa Demanda e não pode atacar!']);
       return;
     }
 
@@ -426,6 +438,12 @@ export const GameBoard: React.FC = () => {
     if (currentTurnOwner === 'player' && selectedAttackerId && !isAnimating) {
       const attacker = player.board.find(c => c.instanceId === selectedAttackerId);
       if (attacker) {
+        if (attacker.isStunned || attacker.isPregnant || (attacker.isPJ && attacker.pjBlocked) || getEffectiveDefense(attacker) <= 0) {
+          setLogs(prev => [...prev, `⚠️ ${attacker.name} está inativa ou bloqueada e não pode atacar neste turno!`]);
+          setSelectedAttackerId(null);
+          return;
+        }
+
         // Validate Priority rule
         if (!isValidAttackTarget(defender, computer.board)) {
           setLogs(prev => [...prev, '🎯 REGRA DE PRIORIDADE: Você é obrigado a atacar a carta inimiga com Prioridade primeiro!']);
