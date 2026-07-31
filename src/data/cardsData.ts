@@ -104,12 +104,20 @@ export function generateDeck(count: number = 48): GameCard[] {
     // Determine random variations for Contrato PJ
     const isPJ = Math.random() < 0.5; // 50% chance of being Contrato PJ
     
-    // Assign 0 to 2 random modifiers (increased modifier chance by 50%)
+    // Exact stats matching the character template
+    const cost = template.baseCost;
+    const attack = template.baseAttack;
+    const defense = template.baseDefense;
+
+    // Requirement 2: Proteção modifier can ONLY be given to cards with attack < 6
+    const allowedModifiers = attack < 6 ? possibleModifiers : possibleModifiers.filter(m => m !== 'protecao');
+
+    // Assign 0 to 2 random modifiers
     const rand = Math.random();
     const numModifiers = rand < 0.18 ? 2 : rand < 0.78 ? 1 : 0;
     const cardModifiers: CardModifier[] = [];
     if (numModifiers > 0) {
-      const shuffled = [...possibleModifiers].sort(() => 0.5 - Math.random());
+      const shuffled = [...allowedModifiers].sort(() => 0.5 - Math.random());
       for (let m = 0; m < numModifiers; m++) {
         cardModifiers.push(shuffled[m]);
       }
@@ -130,11 +138,6 @@ export function generateDeck(count: number = 48): GameCard[] {
     if (cardModifiers.includes('enfraquecer')) {
       weakenPower = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
     }
-
-    // Exact stats matching the character template
-    const cost = template.baseCost;
-    const attack = template.baseAttack;
-    const defense = template.baseDefense;
 
     const card: GameCard = {
       instanceId: `card_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,

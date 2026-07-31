@@ -249,6 +249,21 @@ export function removeCardsWithCascade(
 }
 
 /**
+ * Applies Layoff event damage (2 pts) to a card.
+ * Requirement 4: Cards with 'Proteção' lose protection instead of taking damage.
+ */
+export function applyLayoffDamageToCard(card: GameCard): GameCard {
+  if (card.hasProtection || card.modifiers.includes('protecao')) {
+    return {
+      ...card,
+      hasProtection: false,
+      modifiers: card.modifiers.filter(m => m !== 'protecao'),
+    };
+  }
+  return applyDamageToCard(card, 2);
+}
+
+/**
  * Grants 2 new modifiers to a card that reached 3 turns on board (Tempo de Serviço).
  * If 'buff' is among the new modifiers, immediately applies buff to all ally board cards.
  */
@@ -260,7 +275,12 @@ export function grantTempoDeServicoBonus(
   updatedAllyBoard: GameCard[];
   newModifiers: import('../types').CardModifier[];
 } {
-  const allPossible: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
+  // Requirement 2: Proteção modifier can ONLY be given to cards with attack < 6
+  const effectiveAtk = card.attack + card.attackBuff;
+  let allPossible: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
+  if (card.attack >= 6 || effectiveAtk >= 6) {
+    allPossible = allPossible.filter(m => m !== 'protecao');
+  }
   
   const missing = allPossible.filter(m => !card.modifiers.includes(m));
   

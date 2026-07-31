@@ -1,5 +1,5 @@
 import { EventType, GlobalEvent, PlayerState, GameCard } from '../types';
-import { applyDamageToCard, removeCardsWithCascade, grantTempoDeServicoBonus } from './rules';
+import { applyDamageToCard, applyLayoffDamageToCard, removeCardsWithCascade, grantTempoDeServicoBonus } from './rules';
 
 export const ALL_EVENT_TYPES: EventType[] = [
   'layoff',
@@ -67,12 +67,11 @@ export function triggerRandomEvent(
     candidateTypes = candidateTypes.filter(t => t !== 'gravidez');
   }
 
-  if (updatedPlayer.board.length === 0) {
-    candidateTypes = candidateTypes.filter(t => t !== 'gripe');
-  }
-
   if (updatedPlayer.board.length === 0 && updatedComputer.board.length === 0) {
-    candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico' && t !== 'layoff' && t !== 'baixa_demanda');
+    candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico' && t !== 'layoff' && t !== 'baixa_demanda' && t !== 'gripe');
+  } else {
+    // Requirement 6: Double the chance of 'gripe' event occurring (can occur multiple times per game)
+    candidateTypes.push('gripe');
   }
 
   const selectedType = candidateTypes[Math.floor(Math.random() * candidateTypes.length)];
@@ -87,11 +86,12 @@ export function triggerRandomEvent(
   switch (selectedType) {
     case 'layoff': {
       title = '🚨 EVENTO: LAYOFF EM MASSA!';
-      description = 'Corte de gastos da diretoria! Todas as cartas de todos os jogadores sofrem 2 pontos de dano e reavalia demissão.';
-      logMessage = `[${timestamp}] CRITICAL: LAYOFF DETECTADO! 2 pts de dano em todas as cartas da mesa.`;
+      description = 'Corte de gastos da diretoria! Cartas sem proteção sofrem 2 pts de dano; cartas com Proteção perdem o escudo.';
+      logMessage = `[${timestamp}] CRITICAL: LAYOFF DETECTADO! Cartas sofrem 2 pts de dano (ou perdem Proteção).`;
 
-      updatedPlayer.board = updatedPlayer.board.map(c => applyDamageToCard(c, 2));
-      updatedComputer.board = updatedComputer.board.map(c => applyDamageToCard(c, 2));
+      // Requirement 4: Cards with Proteção lose protection instead of taking damage
+      updatedPlayer.board = updatedPlayer.board.map(c => applyLayoffDamageToCard(c));
+      updatedComputer.board = updatedComputer.board.map(c => applyLayoffDamageToCard(c));
 
       // Process cascade deaths from layoff damage
       const pDeadIds = updatedPlayer.board.filter(c => c.defense <= 0).map(c => c.instanceId);
@@ -204,20 +204,25 @@ export function triggerRandomEvent(
 
     case 'gripe': {
       title = '🤧 EVENTO: EPIDEMIA DE GRIPE!';
-      description = 'Surto de virose no escritório! Uma carta do jogador fica doente (-1 de Ataque). Toda carta que entrar em contato com ela também ficará doente!';
+      description = 'Surto de virose no escritório! Uma carta na mesa fica doente (-1 de Ataque). Toda carta que entrar em contato com ela em combate também ficará doente!';
 
-      if (updatedPlayer.board.length > 0) {
-        const sickIndex = Math.floor(Math.random() * updatedPlayer.board.length);
-        const targetCard = updatedPlayer.board[sickIndex];
-        updatedPlayer.board[sickIndex] = {
-          ...targetCard,
-          isSick: true,
-          attack: Math.max(0, targetCard.attack - 1),
-        };
-        const sickCard = updatedPlayer.board[sickIndex];
-        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do Jogador pegou gripe (-1 de Ataque)! Qualquer carta que entrar em contato com ela também ficará doente.`;
+      const allOnBoard = [...updatedPlayer.board, ...updatedComputer.board];
+      if (allOnBoard.length > 0) {
+        const chosenCard = allOnBoard[Math.floor(Math.random() * allOnBoard.length)];
+        const isPlayer = updatedPlayer.board.some(c => c.instanceId === chosenCard.instanceId);
+        const targetBoard = isPlayer ? updatedPlayer.board : updatedComputer.board;
+        const idx = targetBoard.findIndex(c => c.instanceId === chosenCard.instanceId);
+        if (idx !== -1) {
+          targetBoard[idx] = {
+            ...targetBoard[idx],
+            isSick: true,
+            attack: Math.max(0, targetBoard[idx].attack - 1),
+          };
+          const sickCard = targetBoard[idx];
+          logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! ${sickCard.name} do ${isPlayer ? 'Jogador' : 'Computador'} pegou gripe (-1 de Ataque)! Toda carta que entrar em contato com ela ficará infectada.`;
+        }
       } else {
-        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! O Jogador não possui cartas na mesa para serem infectadas.`;
+        logMessage = `[${timestamp}] WARN: EPIDEMIA DE GRIPE! Nenhuma carta na mesa no momento para ser infectada.`;
       }
       break;
     }

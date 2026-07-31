@@ -11,7 +11,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -103,10 +103,10 @@ export const GameBoard: React.FC = () => {
   const initGame = () => {
     const fullDeck = generateDeck(48);
 
-    // Deal 4 initial cards to Player hand and 4 to Computer hand
-    const playerHand = fullDeck.slice(0, 4).map(c => ({ ...c, owner: 'player' as const }));
-    const computerHand = fullDeck.slice(4, 8).map(c => ({ ...c, owner: 'computer' as const }));
-    const remainingDeck = fullDeck.slice(8);
+    // Requirement 1: Deal 3 initial cards to Player hand and 3 to Computer hand
+    const playerHand = fullDeck.slice(0, 3).map(c => ({ ...c, owner: 'player' as const }));
+    const computerHand = fullDeck.slice(3, 6).map(c => ({ ...c, owner: 'computer' as const }));
+    const remainingDeck = fullDeck.slice(6);
 
     setDeck(remainingDeck);
 
@@ -150,8 +150,8 @@ export const GameBoard: React.FC = () => {
     setWinner(null);
     setIsGameStarted(true);
     setLogs([
-      '🎮 Jogo iniciado! As cartas só entram em campo quando você paga o custo de Café.',
-      '☕ Clique em uma carta da sua mão para selecionar e ver o botão de compra.',
+      '🎮 Jogo iniciado! Mão máxima de 3 cartas. As cartas entram na mesa ao pagar o custo de Café.',
+      '☕ Cartas "recém-contratadas" possuem 70% de chance de nascer inativas no primeiro turno.',
     ]);
   };
 
@@ -205,6 +205,14 @@ export const GameBoard: React.FC = () => {
     const [playedCard] = newHand.splice(index, 1);
     playedCard.owner = 'player';
 
+    // Requirement 3: 70% chance of being inactive on birth (turn 1)
+    const isInactiveOnBirth = Math.random() < 0.7;
+    if (isInactiveOnBirth) {
+      playedCard.isStunned = true;
+      playedCard.stunnedRounds = 1;
+      playedCard.stunReason = 'Inativa (recém-contratada)';
+    }
+
     // Apply buff if card has 'buff'
     const updatedBoard = applyPlayBuff(playedCard, player.board);
     updatedBoard.push(playedCard);
@@ -216,7 +224,39 @@ export const GameBoard: React.FC = () => {
       board: updatedBoard,
     }));
 
-    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role}).`]);
+    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno - 70% nascer)' : ' ✓ (Ativa no 1º dia)'}.`]);
+  };
+
+  // Requirement 5: Demissão voluntária button handler
+  const handleVoluntaryResignation = (card: GameCard) => {
+    if (currentTurnOwner !== 'player' || isAnimating) return;
+
+    // Requirement 5: se a carta tem custo > 1, o café retornado na demissão voluntária é o custo - 1
+    const refundCoffee = card.cost > 1 ? (card.cost - 1) : 0;
+
+    soundFx.playCardSound();
+
+    setPlayer(prev => {
+      const res = removeCardsWithCascade(prev.board, [card.instanceId]);
+      const extraFired = res.allFiredCards.length - 1;
+      if (extraFired > 0) {
+        setLogs(l => [...l, `⚠️ DEMISSÃO EM CADEIA! A demissão de ${card.name} removeu o buff e demitiu ${extraFired} colega(s).`]);
+      }
+      return {
+        ...prev,
+        coffee: Math.min(10, prev.coffee + refundCoffee),
+        board: res.survivingBoard,
+        firedCount: prev.firedCount + res.allFiredCards.length,
+      };
+    });
+
+    setLogs(prev => [
+      ...prev,
+      `🚪 Demissão voluntária de ${card.name}! ${refundCoffee > 0 ? `Recuperou +${refundCoffee} Café (Custo original: ${card.cost}).` : 'Nenhum café retornado (Custo era <= 1).'}`
+    ]);
+
+    setSelectedBoardCardId(null);
+    setSelectedAttackerId(null);
   };
 
   // 2. Select Card on Player Board (Shows attributes panel and enables attack)
@@ -462,19 +502,28 @@ export const GameBoard: React.FC = () => {
     setSelectedHandCardId(null);
     setSelectedBoardCardId(null);
 
-    // 1. Event Check
+    // Requirement 1: Return unplayed cards from player hand back to deck
+    let currentDeck = [...deck];
     let updatedP = { ...player, board: resetPlayerBoard };
     let updatedC = { ...computer };
 
+    if (updatedP.hand.length > 0) {
+      currentDeck = [...currentDeck, ...updatedP.hand].sort(() => Math.random() - 0.5);
+      updatedP.hand = [];
+      setLogs(prev => [...prev, '🔄 Suas cartas não jogadas da mão foram devolvidas ao baralho.']);
+    }
+
+    // 1. Event Check
     const eventTriggers = checkShouldTriggerEvent(turnsSinceLastEvent);
     if (eventTriggers) {
       soundFx.eventAlertSound();
-      const outcome = triggerRandomEvent(turnNumber, updatedP, updatedC, deck);
+      const outcome = triggerRandomEvent(turnNumber, updatedP, updatedC, currentDeck);
       setActiveEvent(outcome.event);
       setEventHistory(prev => [...prev, outcome.event]);
       updatedP = outcome.updatedPlayer;
       updatedC = outcome.updatedComputer;
       if (outcome.updatedDeck) {
+        currentDeck = outcome.updatedDeck;
         setDeck(outcome.updatedDeck);
       }
       setTurnsSinceLastEvent(0);
@@ -508,7 +557,6 @@ export const GameBoard: React.FC = () => {
     await new Promise(r => setTimeout(r, 1000));
 
     // --- STEP 2: COMPUTER TURN EXECUTION ---
-    let currentDeck = [...deck];
     let compState: PlayerState = {
       ...updatedC,
       coffee: Math.min(10, updatedC.coffee + 2),
@@ -517,16 +565,15 @@ export const GameBoard: React.FC = () => {
       drawBlockedRounds: Math.max(0, updatedC.drawBlockedRounds - 1),
     };
 
-    // Computer Draw Card (Only if hand has < 5 cards)
+    // Requirement 1: Computer draws up to 3 cards into hand
+    const compNeeded = 3 - compState.hand.length;
     if (updatedC.drawBlockedRounds > 0) {
       setLogs(prev => [...prev, '🤖 Computador com compras bloqueadas por licença maternidade.']);
-    } else if (compState.hand.length < 5 && currentDeck.length > 0) {
-      const drawn = currentDeck.shift()!;
-      compState.hand.push({ ...drawn, owner: 'computer' });
+    } else if (compNeeded > 0 && currentDeck.length > 0) {
+      const drawnCards = currentDeck.splice(0, compNeeded).map(c => ({ ...c, owner: 'computer' as const }));
+      compState.hand = [...compState.hand, ...drawnCards];
       setDeck(currentDeck);
-      setLogs(prev => [...prev, `🤖 Computador comprou 1 carta (Mão: ${compState.hand.length}/5).`]);
-    } else if (compState.hand.length >= 5) {
-      setLogs(prev => [...prev, `🤖 Mão do computador cheia (${compState.hand.length}/5). Nenhuma carta comprada.`]);
+      setLogs(prev => [...prev, `🤖 Computador comprou ${drawnCards.length} carta(s) (Mão: ${compState.hand.length}/3).`]);
     }
 
     setComputer({ ...compState });
@@ -562,6 +609,14 @@ export const GameBoard: React.FC = () => {
         const [cardToPlay] = newHand.splice(chosen.index, 1);
         cardToPlay.owner = 'computer';
 
+        // Requirement 3: 70% chance of birth inactivity
+        const isInactiveOnBirth = Math.random() < 0.7;
+        if (isInactiveOnBirth) {
+          cardToPlay.isStunned = true;
+          cardToPlay.stunnedRounds = 1;
+          cardToPlay.stunReason = 'Inativa (recém-contratada)';
+        }
+
         const newBoard = applyPlayBuff(cardToPlay, compState.board);
         newBoard.push(cardToPlay);
 
@@ -573,12 +628,12 @@ export const GameBoard: React.FC = () => {
         };
 
         setComputer({ ...compState });
-        setLogs(prev => [...prev, `🤖 Computador colocou em campo: ${cardToPlay.name} (${cardToPlay.role})!`]);
+        setLogs(prev => [...prev, `🤖 Computador colocou em campo: ${cardToPlay.name} (${cardToPlay.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ''}!`]);
         await new Promise(r => setTimeout(r, 1200));
       }
     }
 
-    // B. AI Attacks Step-by-Step with 3s Animation Pause
+    // B. AI Attacks Step-by-Step with Animation
     if (compState.canAttackThisTurn) {
       let attackLoop = true;
       let attackSafety = 0;
@@ -591,7 +646,7 @@ export const GameBoard: React.FC = () => {
 
         const readyAttackers = latestCompBoard.filter(c => {
           const maxAttacks = getMaxAttacksAllowed(c);
-          return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
+          return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked) && !c.isStunned;
         });
 
         const aliveDefenders = latestPlayerBoard.filter(c => getEffectiveDefense(c) > 0);
@@ -622,6 +677,14 @@ export const GameBoard: React.FC = () => {
       }
     }
 
+    // Requirement 1: Return unplayed cards in Computer hand back to deck
+    if (compState.hand.length > 0) {
+      currentDeck = [...currentDeck, ...compState.hand].sort(() => Math.random() - 0.5);
+      compState = { ...compState, hand: [] };
+      setComputer({ ...compState });
+      setLogs(prev => [...prev, '🤖 As cartas não jogadas do computador foram devolvidas ao baralho.']);
+    }
+
     // Return turn to Player
     await new Promise(r => setTimeout(r, 800));
 
@@ -639,13 +702,15 @@ export const GameBoard: React.FC = () => {
       if (drawBlocked > 0) {
         drawBlocked -= 1;
         setLogs(prev => [...prev, '🚫 Suas compras estão bloqueadas por licença maternidade!']);
-      } else if (newHand.length < 5 && curDeck.length > 0) {
-        const card = curDeck.shift()!;
-        setDeck(curDeck);
-        newHand.push({ ...card, owner: 'player' });
-        setLogs(prev => [...prev, `📥 Você comprou a carta: ${card.name}! (Mão: ${newHand.length}/5)`]);
-      } else if (newHand.length >= 5) {
-        setLogs(prev => [...prev, `⚠️ Sua mão está cheia (${newHand.length}/5). Nenhuma carta comprada neste turno.`]);
+      } else {
+        // Requirement 1: Draw up to 3 cards into hand
+        const playerNeeded = 3 - newHand.length;
+        if (playerNeeded > 0 && curDeck.length > 0) {
+          const drawnCards = curDeck.splice(0, playerNeeded).map(c => ({ ...c, owner: 'player' as const }));
+          newHand = [...newHand, ...drawnCards];
+          setDeck(curDeck);
+          setLogs(prev => [...prev, `📥 Você comprou ${drawnCards.length} carta(s) para sua mão! (Mão: ${newHand.length}/3)`]);
+        }
       }
 
       return {
@@ -759,7 +824,7 @@ export const GameBoard: React.FC = () => {
             <div className="md:col-span-2 flex items-center justify-start gap-1.5 overflow-x-auto p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 min-h-[95px]">
               <div className="flex flex-col items-center justify-center shrink-0 pr-1.5 border-r border-slate-800 mr-1 text-[10px] text-slate-400">
                 <span className="font-bold text-slate-300">MÃO AI</span>
-                <span className="font-black text-cyan-400">{computer.hand.length}/5</span>
+                <span className="font-black text-cyan-400">{computer.hand.length}/3</span>
               </div>
               {computer.hand.length === 0 ? (
                 <span className="text-xs text-slate-500 italic">Mão vazia</span>
@@ -980,6 +1045,29 @@ export const GameBoard: React.FC = () => {
                       : player.board.length >= 5
                       ? 'Mesa Cheia (Máx 5)'
                       : 'Indisponível'}
+                  </button>
+                );
+              })()}
+
+              {/* BOTÃO DEMISSÃO VOLUNTÁRIA - SE FOR CARTA CONTRATADA NA MESA DO JOGADOR */}
+              {!isHandCard && isPlayerCard && (() => {
+                const isMyTurn = currentTurnOwner === 'player';
+                const refundCoffee = cardToShow.cost > 1 ? (cardToShow.cost - 1) : 0;
+                const canResign = isMyTurn && !isAnimating;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleVoluntaryResignation(cardToShow)}
+                    disabled={!canResign}
+                    className={`shrink-0 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
+                      canResign
+                        ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-700 hover:from-amber-500 hover:to-rose-500 text-white shadow-rose-900/40 active:scale-95 ring-2 ring-rose-500/50'
+                        : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                    }`}
+                  >
+                    <UserX className="w-4 h-4" />
+                    Demissão Voluntária {refundCoffee > 0 ? `(+${refundCoffee} ☕)` : '(0 ☕)'}
                   </button>
                 );
               })()}
