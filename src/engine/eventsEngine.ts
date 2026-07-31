@@ -67,6 +67,16 @@ export function triggerRandomEvent(
     candidateTypes = candidateTypes.filter(t => t !== 'gravidez');
   }
 
+  // Check cards eligible for Tempo de Serviço (at least 3 turns on board)
+  const cardsWith3Turns = [
+    ...updatedPlayer.board,
+    ...updatedComputer.board
+  ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.hasServiceBonus);
+
+  if (cardsWith3Turns.length === 0) {
+    candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico');
+  }
+
   if (updatedPlayer.board.length === 0 && updatedComputer.board.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico' && t !== 'layoff' && t !== 'baixa_demanda' && t !== 'gripe');
   } else {
@@ -317,12 +327,16 @@ export function triggerRandomEvent(
 
     case 'tempo_servico': {
       title = '🎖️ EVENTO: RECONHECIMENTO DE TEMPO DE SERVIÇO!';
-      description = 'Promoção e tempo de casa! Uma carta veterana na mesa ganha 2 novos modificadores (e se ganhar Buff, aplica imediatamente aos colegas)!';
+      description = 'Promoção e tempo de casa! Uma carta veterana na mesa (com 3+ turnos de empresa) ganha 2 novos modificadores!';
 
-      const allBoardCards = [...updatedPlayer.board, ...updatedComputer.board];
-      if (allBoardCards.length > 0) {
-        // Pick card with highest turnsOnBoard or random
-        const candidateCard = [...allBoardCards].sort((a, b) => (b.turnsOnBoard || 0) - (a.turnsOnBoard || 0))[0];
+      const eligibleCards = [
+        ...updatedPlayer.board,
+        ...updatedComputer.board
+      ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.hasServiceBonus);
+
+      if (eligibleCards.length > 0) {
+        // Pick card with highest turnsOnBoard
+        const candidateCard = [...eligibleCards].sort((a, b) => (b.turnsOnBoard || 0) - (a.turnsOnBoard || 0))[0];
 
         const isPlayer = updatedPlayer.board.some(c => c.instanceId === candidateCard.instanceId);
         const ownerState = isPlayer ? updatedPlayer : updatedComputer;
@@ -342,7 +356,7 @@ export function triggerRandomEvent(
           logMessage = `[${timestamp}] SUCCESS: TEMPO DE SERVIÇO! ${candidateCard.name} do ${isPlayer ? 'Jogador' : 'Computador'} ganhou 2 novos modificadores: ${newModifiers.join(', ')}!`;
         }
       } else {
-        logMessage = `[${timestamp}] NOTICE: TEMPO DE SERVIÇO! Nenhuma carta no campo de batalha.`;
+        logMessage = `[${timestamp}] NOTICE: TEMPO DE SERVIÇO! Nenhuma carta veterana no campo de batalha.`;
       }
       break;
     }
