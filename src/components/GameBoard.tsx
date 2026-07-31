@@ -495,16 +495,13 @@ export const GameBoard: React.FC = () => {
 
     setIsAnimating(true);
 
-    // Reset player attack counters, tick card status durations, and increment turnsOnBoard
-    const resetPlayerBoard = processBoardCardsTurn(player.board, 'Jogador');
-
+    // Keep player board as is at turn end; board status will process at start of player's next turn
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
     setSelectedBoardCardId(null);
 
-    // Requirement 1: Return unplayed cards from player hand back to deck
     let currentDeck = [...deck];
-    let updatedP = { ...player, board: resetPlayerBoard };
+    let updatedP = { ...player };
     let updatedC = { ...computer };
 
     if (updatedP.hand.length > 0) {
@@ -561,7 +558,7 @@ export const GameBoard: React.FC = () => {
       ...updatedC,
       coffee: Math.min(10, updatedC.coffee + 2),
       hand: [...updatedC.hand],
-      board: [...updatedC.board],
+      board: processBoardCardsTurn(updatedC.board, 'Computador'),
       drawBlockedRounds: Math.max(0, updatedC.drawBlockedRounds - 1),
     };
 
@@ -727,7 +724,6 @@ export const GameBoard: React.FC = () => {
 
     setComputer(prevC => ({
       ...prevC,
-      board: processBoardCardsTurn(prevC.board, 'Computador'),
     }));
 
     setLogs(prev => [...prev, '👉 SEU TURNO! Ganhou +2 Café.']);
