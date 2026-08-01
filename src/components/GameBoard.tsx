@@ -270,10 +270,10 @@ export const GameBoard: React.FC = () => {
     soundFx.playCardSound();
 
     setPlayer(prev => {
-      const res = removeCardsWithCascade(prev.board, [card.instanceId]);
+      const res = removeCardsWithCascade(prev.board, [card.instanceId], { isVoluntaryResignation: true });
       const extraFired = res.allFiredCards.length - 1;
       if (extraFired > 0) {
-        setLogs(l => [...l, `⚠️ DEMISSÃO EM CADEIA! A demissão de ${card.name} removeu o buff e demitiu ${extraFired} colega(s).`]);
+        setLogs(l => [...l, `⚠️ DEMISSÃO EM CADEIA! A demissão de ${card.name} demitiu ${extraFired} colega(s).`]);
       }
       return {
         ...prev,
@@ -520,20 +520,33 @@ export const GameBoard: React.FC = () => {
       return item;
     });
 
-    // Check Tempo de Serviço for cards with turnsOnBoard >= 3 and !hasServiceBonus
+    // Check Tempo de Serviço for cards every 3 turns on board
     for (let i = 0; i < updatedBoard.length; i++) {
       const card = updatedBoard[i];
-      if ((card.turnsOnBoard || 0) >= 3 && !card.hasServiceBonus) {
-        const allyBoard = updatedBoard.filter((_, idx) => idx !== i);
-        const { updatedCard, updatedAllyBoard, newModifiers } = grantTempoDeServicoBonus(card, allyBoard);
-        
-        updatedBoard = [
-          ...updatedAllyBoard.slice(0, i),
-          updatedCard,
-          ...updatedAllyBoard.slice(i)
-        ];
+      const turns = card.turnsOnBoard || 0;
+      if (turns >= 3 && turns % 3 === 0 && card.lastServiceBonusTurn !== turns) {
+        if (card.isPJ) {
+          const msg = `Evento \`tempo de serviço\` desabilitado para ${card.name} por ser PJ`;
+          console.log(msg);
+          setLogs(prev => [...prev, `⚠️ ${msg}`]);
+          updatedBoard[i] = {
+            ...card,
+            lastServiceBonusTurn: turns,
+          };
+        } else {
+          const allyBoard = updatedBoard.filter((_, idx) => idx !== i);
+          const { updatedCard, updatedAllyBoard, newModifiers } = grantTempoDeServicoBonus(card, allyBoard);
+          
+          updatedBoard = [
+            ...updatedAllyBoard.slice(0, i),
+            { ...updatedCard, lastServiceBonusTurn: turns },
+            ...updatedAllyBoard.slice(i)
+          ];
 
-        setLogs(prev => [...prev, `🎖️ TEMPO DE SERVIÇO (${logPrefix})! ${card.name} completou 3 turnos na mesa e ganhou 2 novos modificadores (${newModifiers.join(', ')}).`]);
+          const msg = `🎖️ TEMPO DE SERVIÇO (${logPrefix})! ${card.name} completou ${turns} turnos na mesa e ganhou 2 novos modificadores (${newModifiers.join(', ')}).`;
+          console.log(msg);
+          setLogs(prev => [...prev, msg]);
+        }
       }
     }
 

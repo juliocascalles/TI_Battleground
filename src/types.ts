@@ -40,6 +40,7 @@ export interface GameCard {
   isSick?: boolean; // From Epidemia de Gripe event
   turnsOnBoard?: number; // Track rounds card has been working on board
   hasServiceBonus?: boolean; // Granted after 3 turns on board
+  lastServiceBonusTurn?: number; // Last turn milestone (3, 6, 9...) when service bonus was handled
   canBeBornActive?: boolean; // Whether card can be born active (10% chance)
   avatarSvg: string;
   quote: string;

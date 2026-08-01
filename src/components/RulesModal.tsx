@@ -111,7 +111,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
             <div className="space-y-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
               <div>
-                <strong className="text-cyan-300">🎖️ Tempo de Serviço:</strong> Cartas que permanecem em jogo (na mesa) por 3 turnos ganham <strong className="text-white">2 novos modificadores</strong>. Se um dos modificadores for Buff, o bônus é aplicado imediatamente aos colegas!
+                <strong className="text-cyan-300">🎖️ Tempo de Serviço:</strong> A cada 3 turnos que a carta sobreviver na mesa, ela ganha <strong className="text-white">2 novos modificadores</strong> (desabilitado para cartas PJ). Se um dos modificadores for Buff, o bônus é aplicado imediatamente aos colegas!
               </div>
 
               <div>

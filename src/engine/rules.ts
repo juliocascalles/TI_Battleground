@@ -203,7 +203,8 @@ export function removeBuffFromCard(card: GameCard, atkAdd: number, defAdd: numbe
  */
 export function removeCardsWithCascade(
   board: GameCard[],
-  initialDeadIds: string[]
+  initialDeadIds: string[],
+  options?: { isVoluntaryResignation?: boolean }
 ): {
   survivingBoard: GameCard[];
   allFiredCards: GameCard[];
@@ -221,8 +222,15 @@ export function removeCardsWithCascade(
   const deadQueue = [...firedCards];
   currentBoard = currentBoard.filter(c => !deadMap.has(c.instanceId));
 
+  const initialDeadSet = new Set<string>(initialDeadIds);
+
   while (deadQueue.length > 0) {
     const deadCard = deadQueue.shift()!;
+
+    // On voluntary resignation, do not remove the buff granted by the resigning card
+    if (options?.isVoluntaryResignation && initialDeadSet.has(deadCard.instanceId)) {
+      continue;
+    }
 
     if (deadCard.modifiers.includes('buff')) {
       const atkAdd = deadCard.buffAttackValue ?? 1;

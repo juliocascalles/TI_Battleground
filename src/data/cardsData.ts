@@ -146,7 +146,7 @@ export function generateDeck(count: number = 48): GameCard[] {
     const template = CARD_TEMPLATES[i % CARD_TEMPLATES.length];
 
     // Determine random variations for Contrato PJ
-    const isPJ = Math.random() < 0.5; // 50% chance of being Contrato PJ
+    const isPJ = Math.random() < 0.6; // 60% chance of being Contrato PJ
     
     // Exact stats matching the character template
     const cost = template.baseCost;

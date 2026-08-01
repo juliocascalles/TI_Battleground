@@ -67,11 +67,11 @@ export function triggerRandomEvent(
     candidateTypes = candidateTypes.filter(t => t !== 'gravidez');
   }
 
-  // Check cards eligible for Tempo de Serviço (at least 3 turns on board)
+  // Check cards eligible for Tempo de Serviço (at least 3 turns on board and non-PJ)
   const cardsWith3Turns = [
     ...updatedPlayer.board,
     ...updatedComputer.board
-  ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.hasServiceBonus);
+  ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.isPJ);
 
   if (cardsWith3Turns.length === 0) {
     candidateTypes = candidateTypes.filter(t => t !== 'tempo_servico');
@@ -344,7 +344,7 @@ export function triggerRandomEvent(
       const eligibleCards = [
         ...updatedPlayer.board,
         ...updatedComputer.board
-      ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.hasServiceBonus);
+      ].filter(c => (c.turnsOnBoard || 0) >= 3 && !c.isPJ);
 
       if (eligibleCards.length > 0) {
         // Pick card with highest turnsOnBoard
