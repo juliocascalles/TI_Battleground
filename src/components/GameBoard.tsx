@@ -234,8 +234,8 @@ export const GameBoard: React.FC = () => {
     const [playedCard] = newHand.splice(index, 1);
     playedCard.owner = 'player';
 
-    // Requirement 3: 70% chance of being inactive on birth (turn 1)
-    const isInactiveOnBirth = Math.random() < 0.7;
+    // Requirement 3: 90% chance of being inactive on birth (turn 1)
+    const isInactiveOnBirth = Math.random() < 0.9;
     if (isInactiveOnBirth) {
       playedCard.isStunned = true;
       playedCard.stunnedRounds = 1;
@@ -603,7 +603,7 @@ export const GameBoard: React.FC = () => {
     // --- STEP 2: COMPUTER TURN EXECUTION ---
     let compState: PlayerState = {
       ...updatedC,
-      coffee: Math.min(10, updatedC.coffee + 2),
+      coffee: Math.min(10, updatedC.coffee + (turnNumber === 1 ? 0 : 2)),
       hand: [...updatedC.hand],
       board: processBoardCardsTurn(updatedC.board, 'Computador'),
       drawBlockedRounds: Math.max(0, updatedC.drawBlockedRounds - 1),
@@ -658,8 +658,8 @@ export const GameBoard: React.FC = () => {
         const [cardToPlay] = newHand.splice(chosen.index, 1);
         cardToPlay.owner = 'computer';
 
-        // Requirement 3: 70% chance of birth inactivity
-        const isInactiveOnBirth = Math.random() < 0.7;
+        // Requirement 3: 90% chance of birth inactivity
+        const isInactiveOnBirth = Math.random() < 0.9;
         if (isInactiveOnBirth) {
           cardToPlay.isStunned = true;
           cardToPlay.stunnedRounds = 1;
@@ -729,8 +729,7 @@ export const GameBoard: React.FC = () => {
     // Requirement 1: Return unplayed cards in Computer hand back to deck
     if (compState.hand.length > 0) {
       currentDeck = [...currentDeck, ...compState.hand].sort(() => Math.random() - 0.5);
-      compState = { ...compState, hand: [] };
-      setComputer({ ...compState });
+      setComputer(prevC => ({ ...prevC, hand: [] }));
       setLogs(prev => [...prev, '🤖 As cartas não jogadas do computador foram devolvidas ao baralho.']);
     }
 
@@ -758,7 +757,8 @@ export const GameBoard: React.FC = () => {
           const drawnCards = curDeck.splice(0, playerNeeded).map(c => ({ ...c, owner: 'player' as const }));
           newHand = [...newHand, ...drawnCards];
           setDeck(curDeck);
-          setLogs(prev => [...prev, `📥 Você comprou ${drawnCards.length} carta(s) para sua mão! (Mão: ${newHand.length}/3)`]);
+          const cardText = drawnCards.length === 3 ? 'Três novas cartas foram colocadas na sua mão!' : `${drawnCards.length} nova(s) carta(s) foram colocadas na sua mão!`;
+          setLogs(prev => [...prev, `📥 ${cardText} (Mão: ${newHand.length}/3)`]);
         }
       }
 
