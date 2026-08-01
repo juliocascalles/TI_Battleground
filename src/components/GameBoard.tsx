@@ -233,13 +233,17 @@ export const GameBoard: React.FC = () => {
     const newHand = [...player.hand];
     const [playedCard] = newHand.splice(index, 1);
     playedCard.owner = 'player';
+    playedCard.turnsOnBoard = 0;
 
-    // Requirement 3: 90% chance of being inactive on birth (turn 1)
-    const isInactiveOnBirth = Math.random() < 0.9;
+    // Requirement: Check if card can be born active
+    const isInactiveOnBirth = playedCard.canBeBornActive !== undefined ? !playedCard.canBeBornActive : Math.random() < 0.9;
     if (isInactiveOnBirth) {
       playedCard.isStunned = true;
       playedCard.stunnedRounds = 1;
       playedCard.stunReason = 'Inativa (recém-contratada)';
+    } else {
+      playedCard.isStunned = false;
+      playedCard.stunnedRounds = 0;
     }
 
     // Apply buff if card has 'buff'
@@ -253,7 +257,7 @@ export const GameBoard: React.FC = () => {
       board: updatedBoard,
     }));
 
-    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno - 70% nascer)' : ' ✓ (Ativa no 1º dia)'}.`]);
+    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ' ✓ (Ativa no 1º dia)'}.`]);
   };
 
   // Requirement 5: Demissão voluntária button handler
@@ -657,13 +661,17 @@ export const GameBoard: React.FC = () => {
         const newHand = [...compState.hand];
         const [cardToPlay] = newHand.splice(chosen.index, 1);
         cardToPlay.owner = 'computer';
+        cardToPlay.turnsOnBoard = 0;
 
-        // Requirement 3: 90% chance of birth inactivity
-        const isInactiveOnBirth = Math.random() < 0.9;
+        // Requirement: Check if card can be born active
+        const isInactiveOnBirth = cardToPlay.canBeBornActive !== undefined ? !cardToPlay.canBeBornActive : Math.random() < 0.9;
         if (isInactiveOnBirth) {
           cardToPlay.isStunned = true;
           cardToPlay.stunnedRounds = 1;
           cardToPlay.stunReason = 'Inativa (recém-contratada)';
+        } else {
+          cardToPlay.isStunned = false;
+          cardToPlay.stunnedRounds = 0;
         }
 
         const newBoard = applyPlayBuff(cardToPlay, compState.board);
@@ -1017,7 +1025,9 @@ export const GameBoard: React.FC = () => {
                 {/* MODIFICADORES E STATUS DA CARTA */}
                 <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
                   <span className="text-slate-400 font-medium">Status:</span>
-                  {getEffectiveDefense(cardToShow) > 0 && !cardToShow.isStunned && !cardToShow.pjBlocked ? (
+                  {((cardToShow.turnsOnBoard !== undefined)
+                    ? getEffectiveDefense(cardToShow) > 0 && !cardToShow.isStunned && !cardToShow.pjBlocked
+                    : !!cardToShow.canBeBornActive) ? (
                     <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" /> Ativa
                     </span>

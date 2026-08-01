@@ -93,10 +93,11 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   }
 ];
 
-export function getModifierWeight(modifier: CardModifier, cardAttack: number): number {
+export function getModifierWeight(modifier: CardModifier, cardDefense: number): number {
   if (modifier === 'protecao') {
-    // 50% extra chance for cards with attack < 6; 0 for attack >= 6
-    return cardAttack < 6 ? 1.5 : 0;
+    // Inversely proportional to defense (e.g. 1 def => 3.0, 3 def => 1.0, 6 def => 0.5)
+    const def = Math.max(1, cardDefense);
+    return 3.0 / def;
   }
   if (modifier === 'prioridade') {
     // Reduced chance
@@ -109,20 +110,20 @@ export function getModifierWeight(modifier: CardModifier, cardAttack: number): n
 export function pickWeightedModifiers(
   candidates: CardModifier[],
   count: number,
-  cardAttack: number
+  cardDefense: number
 ): CardModifier[] {
   const pool = [...candidates];
   const selected: CardModifier[] = [];
 
   for (let i = 0; i < count; i++) {
-    const validCandidates = pool.filter(m => getModifierWeight(m, cardAttack) > 0);
+    const validCandidates = pool.filter(m => getModifierWeight(m, cardDefense) > 0);
     if (validCandidates.length === 0) break;
 
-    const totalWeight = validCandidates.reduce((sum, m) => sum + getModifierWeight(m, cardAttack), 0);
+    const totalWeight = validCandidates.reduce((sum, m) => sum + getModifierWeight(m, cardDefense), 0);
     let rand = Math.random() * totalWeight;
 
     for (const mod of validCandidates) {
-      const w = getModifierWeight(mod, cardAttack);
+      const w = getModifierWeight(mod, cardDefense);
       if (rand < w) {
         selected.push(mod);
         const idx = pool.indexOf(mod);
@@ -157,7 +158,7 @@ export function generateDeck(count: number = 48): GameCard[] {
     const numModifiers = rand < 0.18 ? 2 : rand < 0.78 ? 1 : 0;
     const cardModifiers: CardModifier[] = [];
     if (numModifiers > 0) {
-      const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, attack);
+      const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, defense);
       cardModifiers.push(...chosen);
     }
 
@@ -176,6 +177,9 @@ export function generateDeck(count: number = 48): GameCard[] {
     if (cardModifiers.includes('enfraquecer')) {
       weakenPower = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
     }
+
+    // Determine if card can be born active (10% chance)
+    const canBeBornActive = Math.random() < 0.1;
 
     const card: GameCard = {
       instanceId: `card_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
@@ -198,6 +202,7 @@ export function generateDeck(count: number = 48): GameCard[] {
       isPregnant: false,
       pregnantRounds: 0,
       isSick: false,
+      canBeBornActive,
       avatarSvg: template.avatarSvg,
       quote: template.quote,
       owner: 'player', // initialized upon draw

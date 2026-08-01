@@ -276,17 +276,17 @@ export function grantTempoDeServicoBonus(
   updatedAllyBoard: GameCard[];
   newModifiers: import('../types').CardModifier[];
 } {
-  const effectiveAtk = Math.max(card.attack, card.attack + card.attackBuff);
+  const effectiveDef = Math.max(1, getEffectiveDefense(card));
   const possibleModifiers: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
   
   // Prefer modifiers not already present on the card
   const candidates = possibleModifiers.filter(m => !card.modifiers.includes(m));
-  let newMods = pickWeightedModifiers(candidates, 2, effectiveAtk);
+  let newMods = pickWeightedModifiers(candidates, 2, effectiveDef);
 
   // Fallback if missing candidates were fewer than 2
   if (newMods.length < 2) {
     const allowed = possibleModifiers.filter(m => !newMods.includes(m));
-    const extra = pickWeightedModifiers(allowed, 2 - newMods.length, effectiveAtk);
+    const extra = pickWeightedModifiers(allowed, 2 - newMods.length, effectiveDef);
     newMods.push(...extra);
   }
 

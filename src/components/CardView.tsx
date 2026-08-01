@@ -57,7 +57,10 @@ export const CardView: React.FC<CardViewProps> = ({
   const displayCost = actualCost !== undefined ? actualCost : card.cost;
   const effectiveDef = getEffectiveDefense(card);
   const isFired = effectiveDef <= 0;
-  const isActive = effectiveDef > 0 && !card.isStunned && !card.pjBlocked && !card.isPregnant;
+  const isOnBoard = card.turnsOnBoard !== undefined;
+  const isActive = isOnBoard
+    ? effectiveDef > 0 && !card.isStunned && !card.pjBlocked && !card.isPregnant
+    : !!card.canBeBornActive;
   const totalAttack = card.attack + card.attackBuff;
   const totalDefense = Math.max(0, effectiveDef);
 
