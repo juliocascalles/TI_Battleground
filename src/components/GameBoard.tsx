@@ -11,7 +11,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -1034,6 +1034,11 @@ export const GameBoard: React.FC = () => {
                   ) : (
                     <span className="text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/50 flex items-center gap-1 font-semibold">
                       <span className="w-2 h-2 rounded-full bg-rose-400" /> Inativa
+                    </span>
+                  )}
+                  {cardToShow.turnsOnBoard !== undefined && (
+                    <span className="text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/50 flex items-center gap-1 font-semibold">
+                      <Clock className="w-3 h-3 text-cyan-400" /> Sobreviveu: {cardToShow.turnsOnBoard} {cardToShow.turnsOnBoard === 1 ? 'round' : 'rounds'}
                     </span>
                   )}
                   {cardToShow.hasProtection && (

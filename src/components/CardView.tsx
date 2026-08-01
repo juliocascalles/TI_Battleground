@@ -184,6 +184,11 @@ export const CardView: React.FC<CardViewProps> = ({
         {/* 5. ZONE MODIFIERS ROW: rect bbox [230, 6, 537, 40] -> [x: 230, y: 6, w: 307, h: 34] */}
         <foreignObject x="230" y="100" width="307" height="34">
           <div className="w-full h-full flex items-center justify-center gap-1.5 px-1">
+            {card.turnsOnBoard !== undefined && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-black text-cyan-300 bg-cyan-950/90 px-2 py-0.5 rounded border border-cyan-500/70 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-cyan-400" /> {card.turnsOnBoard} {card.turnsOnBoard === 1 ? 'rd' : 'rds'}
+              </span>
+            )}
             {card.hasProtection && (
               <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-300 bg-emerald-950/90 px-2 py-0.5 rounded border border-emerald-500/70 shadow-sm">
                 <Shield className="w-3.5 h-3.5 text-emerald-400" /> Prot
