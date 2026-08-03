@@ -102,7 +102,7 @@ export const GameBoard: React.FC = () => {
 
   // --- INITIALIZE GAME ---
   const initGame = () => {
-    const fullDeck = generateDeck(48);
+    const fullDeck = generateDeck(36);
 
     // Requirement 1: Deal 3 initial cards to Player hand and 3 to Computer hand
     const playerHand = fullDeck.slice(0, 3).map(c => ({ ...c, owner: 'player' as const }));

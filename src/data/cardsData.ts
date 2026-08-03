@@ -141,7 +141,7 @@ export function pickWeightedModifiers(
   return selected;
 }
 
-export function generateDeck(count: number = 48): GameCard[] {
+export function generateDeck(count: number = 36): GameCard[] {
   const deck: GameCard[] = [];
   const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
 
