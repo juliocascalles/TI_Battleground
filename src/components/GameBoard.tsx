@@ -248,6 +248,10 @@ export const GameBoard: React.FC = () => {
       playedCard.stunnedRounds = 0;
     }
 
+    if ((playedCard.role || '').toUpperCase().includes('RH') || playedCard.templateId === 'thais_tudano') {
+      playedCard.isInvisible = true;
+    }
+
     // Apply buff if card has 'buff'
     let updatedBoard = applyPlayBuff(playedCard, player.board);
 
@@ -269,7 +273,8 @@ export const GameBoard: React.FC = () => {
       board: updatedBoard,
     }));
 
-    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ' ✓ (Ativa no 1º dia)'}.`]);
+    const rhStatusMsg = playedCard.isInvisible ? ' 🕵️‍♀️ (RH Invisível / Verso)' : isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ' ✓ (Ativa no 1º dia)';
+    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${rhStatusMsg}.`]);
   };
 
   // Requirement 5: Demissão voluntária button handler
@@ -561,10 +566,15 @@ export const GameBoard: React.FC = () => {
       const pregnantRounds = Math.max(0, (c.pregnantRounds !== undefined ? c.pregnantRounds : c.isPregnant ? 1 : 0) - 1);
       const turnsOnBoard = (c.turnsOnBoard || 0) + 1;
 
+      if (c.isInvisible) {
+        setLogs(prev => [...prev, `👁️ [${logPrefix}] ${c.name} (RH) desvirou e agora pode ser atacada normalmente!`]);
+      }
+
       const item: GameCard = {
         ...c,
         hasAttackedThisTurn: 0,
         turnsOnBoard,
+        isInvisible: false,
         stunnedRounds,
         isStunned: stunnedRounds > 0,
         stunReason: stunnedRounds > 0 ? c.stunReason : undefined,
@@ -746,6 +756,10 @@ export const GameBoard: React.FC = () => {
         } else {
           cardToPlay.isStunned = false;
           cardToPlay.stunnedRounds = 0;
+        }
+
+        if ((cardToPlay.role || '').toUpperCase().includes('RH') || cardToPlay.templateId === 'thais_tudano') {
+          cardToPlay.isInvisible = true;
         }
 
         let newBoard = applyPlayBuff(cardToPlay, compState.board);
@@ -1163,7 +1177,12 @@ export const GameBoard: React.FC = () => {
                   )}
                   {(cardToShow.role || '').toUpperCase().includes('RH') && (
                     <span className="text-emerald-200 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
-                      <UserPlus className="w-3 h-3 text-emerald-400" /> Bônus RH (+1 Triagem grátis por turno em jogo)
+                      <UserPlus className="w-3 h-3 text-emerald-400" /> +1 Triagem grátis por turno
+                    </span>
+                  )}
+                  {cardToShow.isInvisible && (
+                    <span className="text-cyan-200 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/50 flex items-center gap-1 font-semibold">
+                      🕵️‍♀️ RH Invisível (Verso da carta, não pode ser atacada neste turno)
                     </span>
                   )}
                   {cardToShow.isStunned && (() => {

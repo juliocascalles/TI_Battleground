@@ -51,6 +51,10 @@ export function executeAiTurn(
       cardToPlay.owner = 'computer';
       computer.coffee -= chosen.actualCost;
 
+      if ((cardToPlay.role || '').toUpperCase().includes('RH') || cardToPlay.templateId === 'thais_tudano') {
+        cardToPlay.isInvisible = true;
+      }
+
       // Apply buff to existing board allies if card has 'buff'
       computer.board = applyPlayBuff(cardToPlay, computer.board);
       if (cardToPlay.modifiers.includes('hacker')) {

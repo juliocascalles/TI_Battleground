@@ -5,6 +5,7 @@ interface CardBackProps {
   className?: string;
   onClick?: () => void;
   countLabel?: number | string;
+  children?: React.ReactNode;
 }
 
 const createFallbackCardBackSvg = () => {
@@ -18,7 +19,7 @@ const createFallbackCardBackSvg = () => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
-export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, countLabel }) => {
+export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, countLabel, children }) => {
   const [versoUrl, setVersoUrl] = useState(() => getAssetUrl('verso_da_carta.png'));
 
   useEffect(() => {
@@ -72,6 +73,8 @@ export const CardBack: React.FC<CardBackProps> = ({ className = '', onClick, cou
           </span>
         </div>
       )}
+
+      {children}
     </div>
   );
 };

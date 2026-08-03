@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameCard } from '../types';
 import { CardSvgAvatar } from './CardSvgAvatar';
+import { CardBack } from './CardBack';
 import { Shield, Zap, Swords, Target, Lock, Train, Baby, TrendingDown, Activity, Home, AlertTriangle, Clock, TrendingUp, UserPlus } from 'lucide-react';
 import { getEffectiveDefense } from '../engine/rules';
 
@@ -63,6 +64,27 @@ export const CardView: React.FC<CardViewProps> = ({
     : !!card.canBeBornActive;
   const totalAttack = card.attack + card.attackBuff;
   const totalDefense = Math.max(0, effectiveDef);
+
+  if (card.isInvisible) {
+    return (
+      <CardBack
+        onClick={onClick}
+        className={`relative group cursor-pointer transition-all duration-300 ${
+          isSelected
+            ? 'border-yellow-400 ring-4 ring-yellow-400/60 scale-105 z-20 shadow-yellow-500/50'
+            : isValidTarget
+            ? 'border-red-500 ring-4 ring-red-500/60 animate-pulse z-10'
+            : 'border-cyan-500/80 hover:border-cyan-400 hover:shadow-cyan-500/30'
+        } ${className}`}
+      >
+        <div className="absolute top-2 inset-x-2 flex justify-center z-20 pointer-events-none">
+          <span className="bg-slate-950/90 text-cyan-300 border border-cyan-500/80 px-2.5 py-1 rounded-md text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-lg backdrop-blur-xs">
+            <UserPlus className="w-3.5 h-3.5 text-emerald-400" /> RH INVISÍVEL
+          </span>
+        </div>
+      </CardBack>
+    );
+  }
 
   return (
     <div

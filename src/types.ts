@@ -42,6 +42,7 @@ export interface GameCard {
   hasServiceBonus?: boolean; // Granted after 3 turns on board
   lastServiceBonusTurn?: number; // Last turn milestone (3, 6, 9...) when service bonus was handled
   canBeBornActive?: boolean; // Whether card can be born active (10% chance)
+  isInvisible?: boolean; // When true, card is face-down (verso) and cannot be attacked until next turn
   avatarSvg: string;
   quote: string;
   owner: 'player' | 'computer';

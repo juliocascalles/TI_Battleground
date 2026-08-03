@@ -6,7 +6,12 @@ import { pickWeightedModifiers } from '../data/cardsData';
  * If the opponent board contains any card with 'prioridade', the target MUST be one of those cards.
  */
 export function isValidAttackTarget(targetCard: GameCard, opponentBoard: GameCard[]): boolean {
-  const priorityCards = opponentBoard.filter(c => c.modifiers.includes('prioridade') && getEffectiveDefense(c) > 0);
+  if (targetCard.isInvisible) {
+    return false;
+  }
+  const priorityCards = opponentBoard.filter(
+    c => !c.isInvisible && c.modifiers.includes('prioridade') && getEffectiveDefense(c) > 0
+  );
   if (priorityCards.length > 0) {
     return targetCard.modifiers.includes('prioridade');
   }
