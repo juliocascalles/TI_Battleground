@@ -108,8 +108,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2">
                 <span className="text-xl shrink-0 mt-0.5">🤡</span>
                 <div>
-                  <strong className="text-amber-300 block text-xs">Hacker (Raro - Silas Kow) 🤡</strong>
-                  <span className="text-xs text-slate-300">Exclusivo do Silas Kow. Ao ser colocado em jogo na mesa, hackeia o sistema e sorteia novos modificadores para até 3 colegas em jogo.</span>
+                  <strong className="text-amber-300 block text-xs">Hacker (Exclusivo - Silas Kow) 🤡</strong>
+                  <span className="text-xs text-slate-300">Presente em todas as cartas do Silas Kow. Ao ser colocado em jogo na mesa, hackeia o sistema e concede 2 novos modificadores para todas as outras cartas de colegas na mesa.</span>
                 </div>
               </div>
             </div>

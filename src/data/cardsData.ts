@@ -75,7 +75,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     baseDefense: 3,
     isPJ: false,
     avatarSvg: 'silas', 
-    flavorText: 'Pessimista e paranóico. Pode possuir o atributo raro Hacker 🤡.',
+    flavorText: 'Pessimista e paranóico. Possui o atributo Hacker 🤡.',
     quote: 'É só eu virar as costas que a procedure vai travar'
   },
   {
@@ -168,6 +168,11 @@ export function generateDeck(count: number = 36): GameCard[] {
     if (numModifiers > 0) {
       const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, defense, template.id);
       cardModifiers.push(...chosen);
+    }
+
+    // Silas Kow always has the 'hacker' modifier
+    if (template.id === 'silas_kow' && !cardModifiers.includes('hacker')) {
+      cardModifiers.push('hacker');
     }
 
     // Determine buff values if 'buff' modifier is present (+0..3 / +0..3, never +0/+0)

@@ -177,7 +177,7 @@ export function applyPlayHacker(
   updatedAllyBoard: GameCard[];
   logs: string[];
 } {
-  if (!playedCard.modifiers.includes('hacker')) {
+  if (!playedCard.modifiers.includes('hacker') && playedCard.templateId !== 'silas_kow') {
     return { updatedAllyBoard: allyBoard, logs: [] };
   }
 
@@ -185,65 +185,72 @@ export function applyPlayHacker(
   const otherAllies = allyBoard.filter(c => c.instanceId !== playedCard.instanceId);
 
   if (otherAllies.length === 0) {
-    logs.push(`🤡 HACKER! ${playedCard.name} ativou o modo Hacker, mas não havia outros colegas em jogo na mesa.`);
+    logs.push(`🤡 HACKER! ${playedCard.name} entrou em jogo, mas não havia outros colegas na mesa para receber os modificadores.`);
     return { updatedAllyBoard: allyBoard, logs };
   }
-
-  const shuffled = [...otherAllies].sort(() => Math.random() - 0.5);
-  const selectedAllies = shuffled.slice(0, 3);
-  const selectedIds = new Set(selectedAllies.map(a => a.instanceId));
 
   const availablePool: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
 
   const updatedOtherAllies = otherAllies.map(card => {
-    if (!selectedIds.has(card.instanceId)) return card;
+    const cardMods = [...card.modifiers];
+    let updatedCard: GameCard = { ...card };
 
-    const candidateMods = availablePool.filter(m => !card.modifiers.includes(m));
-    if (candidateMods.length === 0) return card;
+    for (let i = 0; i < 2; i++) {
+      const candidateMods = availablePool.filter(m => !cardMods.includes(m));
+      if (candidateMods.length === 0) break;
 
-    const newMod = candidateMods[Math.floor(Math.random() * candidateMods.length)];
-    const updatedCard: GameCard = {
-      ...card,
-      modifiers: [...card.modifiers, newMod],
-    };
+      const newMod = candidateMods[Math.floor(Math.random() * candidateMods.length)];
+      cardMods.push(newMod);
 
-    if (newMod === 'protecao') {
-      updatedCard.hasProtection = true;
-    } else if (newMod === 'buff') {
-      updatedCard.buffAttackValue = Math.floor(Math.random() * 3) + 1;
-      updatedCard.buffDefenseValue = Math.floor(Math.random() * 3) + 1;
-    } else if (newMod === 'enfraquecer') {
-      updatedCard.weakenPower = Math.floor(Math.random() * 3) + 1;
+      if (newMod === 'protecao') {
+        updatedCard.hasProtection = true;
+      } else if (newMod === 'buff') {
+        if (!updatedCard.buffAttackValue && !updatedCard.buffDefenseValue) {
+          updatedCard.buffAttackValue = Math.floor(Math.random() * 3) + 1;
+          updatedCard.buffDefenseValue = Math.floor(Math.random() * 3) + 1;
+        }
+      } else if (newMod === 'enfraquecer') {
+        if (!updatedCard.weakenPower) {
+          updatedCard.weakenPower = Math.floor(Math.random() * 3) + 1;
+        }
+      }
     }
 
+    updatedCard.modifiers = cardMods;
     return updatedCard;
   });
 
   let finalBoard = updatedOtherAllies;
-  // If any selected ally got 'buff', apply that buff to the board
-  const newlyBuffedCards = finalBoard.filter(
-    c => selectedIds.has(c.instanceId) && c.modifiers.includes('buff')
-  );
+
+  // If any other ally received 'buff' as one of its new modifiers, apply that buff to allies
+  const newlyBuffedCards = finalBoard.filter(c => {
+    const orig = otherAllies.find(o => o.instanceId === c.instanceId);
+    return orig && !orig.modifiers.includes('buff') && c.modifiers.includes('buff');
+  });
+
   for (const buffedCard of newlyBuffedCards) {
     finalBoard = applyPlayBuff(buffedCard, finalBoard);
   }
 
-  const modDescriptions = selectedAllies.map(a => {
-    const updated = finalBoard.find(c => c.instanceId === a.instanceId);
-    const addedMod = updated?.modifiers.find(m => !a.modifiers.includes(m));
-    const labelMap: Record<string, string> = {
-      protecao: 'Proteção 🛡️',
-      buff: 'Buff ⚡',
-      ataque_duplo: 'Ataque Duplo ⚔️',
-      prioridade: 'Prioridade 🎯',
-      enfraquecer: 'Enfraquecer 📉',
-      lucro: 'Lucro 💰',
-    };
-    return `${a.name} (+${addedMod ? labelMap[addedMod] || addedMod : 'Bônus'})`;
+  const labelMap: Record<string, string> = {
+    protecao: 'Proteção 🛡️',
+    buff: 'Buff ⚡',
+    ataque_duplo: 'Ataque Duplo ⚔️',
+    prioridade: 'Prioridade 🎯',
+    enfraquecer: 'Enfraquecer 📉',
+    lucro: 'Lucro 💰',
+    hacker: 'Hacker 🤡',
+  };
+
+  const modDescriptions = otherAllies.map(orig => {
+    const updated = finalBoard.find(c => c.instanceId === orig.instanceId);
+    const addedMods = updated?.modifiers.filter(m => !orig.modifiers.includes(m)) || [];
+    const addedLabels = addedMods.map(m => labelMap[m] || m).join(' + ');
+    return `${orig.name} (+2 Mods: ${addedLabels || 'Bônus'})`;
   });
 
   logs.push(
-    `🤡 HACKER! ${playedCard.name} hackeou o sistema e concedeu novos modificadores para ${selectedAllies.length} colega(s) na mesa: ${modDescriptions.join(', ')}.`
+    `🤡 HACKER! ${playedCard.name} entrou em campo e hackeou o sistema: todas as outras ${otherAllies.length} carta(s) na mesa ganharam 2 novos modificadores (${modDescriptions.join('; ')}).`
   );
 
   return { updatedAllyBoard: finalBoard, logs };

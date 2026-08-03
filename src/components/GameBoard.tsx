@@ -1143,7 +1143,7 @@ export const GameBoard: React.FC = () => {
                   )}
                   {cardToShow.modifiers.includes('hacker') && (
                     <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
-                      🤡 Hacker (Coringa: Sorteia modificadores para até 3 colegas em jogo)
+                      🤡 Hacker (Ao entrar em jogo, concede 2 modificadores para todas as outras cartas na mesa)
                     </span>
                   )}
                   {cardToShow.modifiers.includes('ataque_duplo') && (
