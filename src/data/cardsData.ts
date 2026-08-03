@@ -62,7 +62,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     baseDefense: 4,
     isPJ: false,
     avatarSvg: 'jussara',
-    flavorText: 'Rígida, austera e com cara de poucos amigos.',
+    flavorText: 'Rígida, austera e com cara de poucos amigos. Em jogo, concede +1 Triagem grátis por turno.',
     quote: 'Regras acima de tudo!'
   },
   {

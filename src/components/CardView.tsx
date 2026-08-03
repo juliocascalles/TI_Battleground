@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameCard } from '../types';
 import { CardSvgAvatar } from './CardSvgAvatar';
-import { Shield, Zap, Swords, Target, Lock, Train, Baby, TrendingDown, Activity, Home, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
+import { Shield, Zap, Swords, Target, Lock, Train, Baby, TrendingDown, Activity, Home, AlertTriangle, Clock, TrendingUp, UserPlus } from 'lucide-react';
 import { getEffectiveDefense } from '../engine/rules';
 
 interface CardViewProps {
@@ -217,6 +217,11 @@ export const CardView: React.FC<CardViewProps> = ({
             {card.modifiers.includes('lucro') && (
               <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-200 bg-amber-950/90 px-2 py-0.5 rounded border border-amber-500/70 shadow-sm">
                 <TrendingUp className="w-3.5 h-3.5 text-amber-400" /> Lucro (+1 ☕)
+              </span>
+            )}
+            {(card.role || '').toUpperCase().includes('RH') && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-200 bg-emerald-950/90 px-2 py-0.5 rounded border border-emerald-500/70 shadow-sm">
+                <UserPlus className="w-3.5 h-3.5 text-emerald-400" /> RH (+1 Triagem)
               </span>
             )}
           </div>

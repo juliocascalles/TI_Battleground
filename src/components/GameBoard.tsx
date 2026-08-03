@@ -303,10 +303,13 @@ export const GameBoard: React.FC = () => {
       return;
     }
 
-    // Starting from 3rd triage attempt in the same round (triageCount >= 2), cost is 1 Coffee
-    const triageCost = triageCount >= 2 ? 1 : 0;
+    // RH characters on board grant +1 free triage each
+    const playerRhCount = player.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
+    const maxFreeTriages = 2 + playerRhCount;
+
+    const triageCost = triageCount >= maxFreeTriages ? 1 : 0;
     if (triageCost > 0 && player.coffee < triageCost) {
-      setLogs(prev => [...prev, '☕ Café insuficiente! A Triagem a partir da 3ª vez na rodada custa 1 ponto de Café.']);
+      setLogs(prev => [...prev, `☕ Café insuficiente! A Triagem a partir da ${maxFreeTriages + 1}ª vez na rodada custa 1 ponto de Café.`]);
       return;
     }
 
@@ -1131,6 +1134,11 @@ export const GameBoard: React.FC = () => {
                       <TrendingUp className="w-3 h-3 text-amber-400" /> Lucro (+1 ☕ por turno)
                     </span>
                   )}
+                  {(cardToShow.role || '').toUpperCase().includes('RH') && (
+                    <span className="text-emerald-200 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
+                      <UserPlus className="w-3 h-3 text-emerald-400" /> Bônus RH (+1 Triagem grátis por turno em jogo)
+                    </span>
+                  )}
                   {cardToShow.isStunned && (() => {
                     const rounds = cardToShow.stunnedRounds !== undefined && cardToShow.stunnedRounds > 0 ? cardToShow.stunnedRounds : 1;
                     const turnsText = rounds === 1 ? '1 turno' : `${rounds} turnos`;
@@ -1250,15 +1258,27 @@ export const GameBoard: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 {/* Triagem Button */}
-                <button
-                  onClick={handleTriage}
-                  disabled={currentTurnOwner !== 'player' || isAnimating || (triageCount >= 2 && player.coffee < 1)}
-                  className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold px-3 py-1 rounded-lg border border-emerald-400/40 shadow-sm transition-all cursor-pointer"
-                  title={triageCount >= 2 ? "Substituir cartas da mão (Custa 1 Café a partir da 3ª vez na rodada)" : `Substituir cartas da mão (Grátis na rodada - uso ${triageCount + 1}/2)`}
-                >
-                  <UserPlus className="w-3.5 h-3.5 text-emerald-200" />
-                  <span>Triagem {triageCount >= 2 ? '(-1 ☕)' : '(Grátis)'}</span>
-                </button>
+                {(() => {
+                  const playerRhCount = player.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
+                  const maxFreeTriages = 2 + playerRhCount;
+                  const isFree = triageCount < maxFreeTriages;
+                  const canAfford = isFree || player.coffee >= 1;
+                  const disabled = currentTurnOwner !== 'player' || isAnimating || !canAfford;
+
+                  return (
+                    <button
+                      onClick={handleTriage}
+                      disabled={disabled}
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold px-3 py-1 rounded-lg border border-emerald-400/40 shadow-sm transition-all cursor-pointer"
+                      title={isFree
+                        ? `Substituir cartas da mão (Grátis na rodada - uso ${triageCount + 1}/${maxFreeTriages}${playerRhCount > 0 ? ` [${playerRhCount} RH em jogo]` : ''})`
+                        : `Substituir cartas da mão (Custa 1 Café a partir da ${maxFreeTriages + 1}ª vez na rodada)`}
+                    >
+                      <UserPlus className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>Triagem {isFree ? '(Grátis)' : '(-1 ☕)'}</span>
+                    </button>
+                  );
+                })()}
 
                 {/* Player Coffee Meter */}
                 <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-inner">
