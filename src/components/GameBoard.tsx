@@ -1128,7 +1128,7 @@ export const GameBoard: React.FC = () => {
                   )}
                   {cardToShow.hasProtection && (
                     <span className="text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1 font-semibold">
-                      <Shield className="w-3 h-3 text-emerald-400" /> Proteção (Anula próximo dano)
+                      <Shield className="w-3 h-3 text-emerald-400" /> Proteção
                     </span>
                   )}
                   {cardToShow.modifiers.includes('buff') && (
@@ -1138,17 +1138,17 @@ export const GameBoard: React.FC = () => {
                   )}
                   {cardToShow.modifiers.includes('enfraquecer') && (
                     <span className="text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/50 flex items-center gap-1 font-semibold">
-                      📉 Enfraquecer (-{cardToShow.weakenPower ?? 1} Ataque do oponente)
+                      📉 Enfraquece {cardToShow.weakenPower ?? 1} o oponente
                     </span>
                   )}
                   {cardToShow.modifiers.includes('hacker') && (
                     <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
-                      🤡 Hacker (Ao entrar em jogo, concede 2 modificadores para outras cartas do Silas Kow na mesa)
+                      🤡 Hacker (+2 mod. p/ DBAs)
                     </span>
                   )}
                   {cardToShow.modifiers.includes('ataque_duplo') && (
                     <span className="text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/50 flex items-center gap-1 font-semibold">
-                      <Swords className="w-3 h-3 text-rose-400" /> Ataque Duplo (2x/turno)
+                      <Swords className="w-3 h-3 text-rose-400" /> Ataque Duplo
                     </span>
                   )}
                   {cardToShow.modifiers.includes('prioridade') && (
