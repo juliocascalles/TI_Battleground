@@ -81,7 +81,7 @@ export function executeAiTurn(
       // Filter computer cards that can still attack
       const readyAttackers = computer.board.filter(c => {
         const maxAttacks = getMaxAttacksAllowed(c);
-        return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
+        return getEffectiveDefense(c) > 0 && !c.isInvisible && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked);
       });
 
       // Filter alive player defender targets

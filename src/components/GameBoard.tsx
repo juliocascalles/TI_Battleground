@@ -11,7 +11,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp, Ghost } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -353,12 +353,42 @@ export const GameBoard: React.FC = () => {
     setLogs(prev => [...prev, `📋 Triagem realizada${costText}! Cartas da mão foram devolvidas e 3 novas cartas foram sacadas do baralho.`]);
   };
 
+  // RH Invisibility ability (Costs 1 Coffee, covers card with back/verso, cannot attack or be attacked for 1 turn)
+  const handleRHInvisibility = (card: GameCard) => {
+    if (currentTurnOwner !== 'player' || isAnimating) return;
+    if (player.coffee < 1) {
+      setLogs(prev => [...prev, '☕ Café insuficiente para ativar a Invisibilidade do RH (Custa 1 ☕)!']);
+      return;
+    }
+    if (card.isInvisible) {
+      setLogs(prev => [...prev, `🕵️‍♀️ ${card.name} já está invisível!`]);
+      return;
+    }
+
+    setPlayer(prev => ({
+      ...prev,
+      coffee: Math.max(0, prev.coffee - 1),
+      board: prev.board.map(c => c.instanceId === card.instanceId ? { ...c, isInvisible: true } : c),
+    }));
+
+    if (selectedAttackerId === card.instanceId) {
+      setSelectedAttackerId(null);
+    }
+
+    soundFx.playCardSound();
+    setLogs(prev => [...prev, `🕵️‍♀️ ${card.name} (RH) ativou a Invisibilidade por 1 ☕! A carta ficou invisível (verso) e não poderá atacar nem ser atacada até o próximo turno.`]);
+  };
+
   // 2. Select Card on Player Board (Shows attributes panel and enables attack)
   const handleSelectPlayerBoardCard = (card: GameCard) => {
     setSelectedHandCardId(null);
     setSelectedBoardCardId(prev => prev === card.instanceId ? null : card.instanceId);
 
     if (currentTurnOwner !== 'player' || isAnimating) return;
+    if (card.isInvisible) {
+      setLogs(prev => [...prev, `🕵️‍♀️ ${card.name} está invisível neste turno (verso da carta) e não pode atacar!`]);
+      return;
+    }
     if (!player.canAttackThisTurn) {
       setLogs(prev => [...prev, '⚠️ Você está impedido de atacar neste turno por evento!']);
       return;
@@ -1236,26 +1266,54 @@ export const GameBoard: React.FC = () => {
                 );
               })()}
 
-              {/* BOTÃO DEMISSÃO VOLUNTÁRIA - SE FOR CARTA CONTRATADA NA MESA DO JOGADOR */}
+              {/* BOTÕES DE AÇÃO - SE FOR CARTA CONTRATADA NA MESA DO JOGADOR */}
               {!isHandCard && isPlayerCard && (() => {
                 const isMyTurn = currentTurnOwner === 'player';
                 const refundCoffee = cardToShow.cost > 1 ? (cardToShow.cost - 1) : 0;
                 const canResign = isMyTurn && !isAnimating;
 
+                const isRH = (cardToShow.role || '').toUpperCase().includes('RH') || cardToShow.templateId === 'thais_tudano';
+                const canInvis = isMyTurn && !isAnimating && isRH && !cardToShow.isInvisible && player.coffee >= 1;
+
                 return (
-                  <button
-                    type="button"
-                    onClick={() => handleVoluntaryResignation(cardToShow)}
-                    disabled={!canResign}
-                    className={`shrink-0 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
-                      canResign
-                        ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-700 hover:from-amber-500 hover:to-rose-500 text-white shadow-rose-900/40 active:scale-95 ring-2 ring-rose-500/50'
-                        : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                    }`}
-                  >
-                    <UserX className="w-4 h-4" />
-                    Demissão Voluntária {refundCoffee > 0 ? `(+${refundCoffee} ☕)` : '(0 ☕)'}
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                    {isRH && (
+                      <button
+                        type="button"
+                        onClick={() => handleRHInvisibility(cardToShow)}
+                        disabled={!canInvis}
+                        className={`shrink-0 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg flex-1 sm:flex-none ${
+                          canInvis
+                            ? 'bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-teal-500 text-white shadow-cyan-900/40 active:scale-95 ring-2 ring-cyan-400/50'
+                            : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                        }`}
+                        title={
+                          cardToShow.isInvisible
+                            ? 'Carta já está invisível neste turno'
+                            : player.coffee < 1
+                            ? 'Café insuficiente (Requer 1 ☕)'
+                            : 'Ficar invisível por 1 turno (Requer 1 ☕)'
+                        }
+                      >
+                        <Ghost className="w-4 h-4 text-cyan-300" />
+                        {cardToShow.isInvisible ? 'Já está Invisível' : 'Ficar Invisível (-1 ☕)'}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleVoluntaryResignation(cardToShow)}
+                      disabled={!canResign}
+                      className={`shrink-0 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg flex-1 sm:flex-none ${
+                        canResign
+                          ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-700 hover:from-amber-500 hover:to-rose-500 text-white shadow-rose-900/40 active:scale-95 ring-2 ring-rose-500/50'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                      }`}
+                    >
+                      <UserX className="w-4 h-4" />
+                      Demissão Voluntária {refundCoffee > 0 ? `(+${refundCoffee} ☕)` : '(0 ☕)'}
+                    </button>
+                  </div>
                 );
               })()}
             </div>
