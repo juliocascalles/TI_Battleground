@@ -182,16 +182,23 @@ export function applyPlayHacker(
   }
 
   const logs: string[] = [];
-  const otherAllies = allyBoard.filter(c => c.instanceId !== playedCard.instanceId);
+  const otherSilasAllies = allyBoard.filter(
+    c => c.instanceId !== playedCard.instanceId && (c.templateId === 'silas_kow' || c.name === 'Silas Kow')
+  );
 
-  if (otherAllies.length === 0) {
-    logs.push(`🤡 HACKER! ${playedCard.name} entrou em jogo, mas não havia outros colegas na mesa para receber os modificadores.`);
+  if (otherSilasAllies.length === 0) {
+    logs.push(`🤡 HACKER! ${playedCard.name} entrou em campo, mas não havia outra carta do Silas Kow na mesa para receber os modificadores.`);
     return { updatedAllyBoard: allyBoard, logs };
   }
 
   const availablePool: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
+  const otherSilasIds = new Set(otherSilasAllies.map(s => s.instanceId));
 
-  const updatedOtherAllies = otherAllies.map(card => {
+  const updatedBoard = allyBoard.map(card => {
+    if (card.instanceId === playedCard.instanceId || !otherSilasIds.has(card.instanceId)) {
+      return card;
+    }
+
     const cardMods = [...card.modifiers];
     let updatedCard: GameCard = { ...card };
 
@@ -220,11 +227,11 @@ export function applyPlayHacker(
     return updatedCard;
   });
 
-  let finalBoard = updatedOtherAllies;
+  let finalBoard = updatedBoard;
 
-  // If any other ally received 'buff' as one of its new modifiers, apply that buff to allies
+  // If any Silas Kow ally received 'buff' as one of its new modifiers, apply that buff to allies
   const newlyBuffedCards = finalBoard.filter(c => {
-    const orig = otherAllies.find(o => o.instanceId === c.instanceId);
+    const orig = otherSilasAllies.find(o => o.instanceId === c.instanceId);
     return orig && !orig.modifiers.includes('buff') && c.modifiers.includes('buff');
   });
 
@@ -242,7 +249,7 @@ export function applyPlayHacker(
     hacker: 'Hacker 🤡',
   };
 
-  const modDescriptions = otherAllies.map(orig => {
+  const modDescriptions = otherSilasAllies.map(orig => {
     const updated = finalBoard.find(c => c.instanceId === orig.instanceId);
     const addedMods = updated?.modifiers.filter(m => !orig.modifiers.includes(m)) || [];
     const addedLabels = addedMods.map(m => labelMap[m] || m).join(' + ');
@@ -250,7 +257,7 @@ export function applyPlayHacker(
   });
 
   logs.push(
-    `🤡 HACKER! ${playedCard.name} entrou em campo e hackeou o sistema: todas as outras ${otherAllies.length} carta(s) na mesa ganharam 2 novos modificadores (${modDescriptions.join('; ')}).`
+    `🤡 HACKER! ${playedCard.name} entrou em campo e hackeou o sistema: todas as outras ${otherSilasAllies.length} carta(s) do Silas Kow na mesa ganharam 2 novos modificadores (${modDescriptions.join('; ')}).`
   );
 
   return { updatedAllyBoard: finalBoard, logs };
