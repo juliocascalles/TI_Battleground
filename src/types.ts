@@ -53,6 +53,7 @@ export interface GameCard {
   // Custom variable modifier stats
   buffAttackValue?: number; // 0 to 3
   buffDefenseValue?: number; // 0 to 3
+  buffedTargetIds?: string[]; // IDs of board allies affected when buff was applied
   weakenPower?: number; // Power of enfraquecer attribute (1 to 3)
 }
 

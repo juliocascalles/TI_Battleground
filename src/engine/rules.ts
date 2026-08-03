@@ -155,6 +155,9 @@ export function applyPlayBuff(playedCard: GameCard, allyBoard: GameCard[]): Game
   const atkAdd = playedCard.buffAttackValue ?? 1;
   const defAdd = playedCard.buffDefenseValue ?? 1;
 
+  const targetIds = allyBoard.map(c => c.instanceId);
+  playedCard.buffedTargetIds = Array.from(new Set([...(playedCard.buffedTargetIds || []), ...targetIds]));
+
   return allyBoard.map(card => ({
     ...card,
     attackBuff: card.attackBuff + atkAdd,
@@ -235,16 +238,22 @@ export function removeCardsWithCascade(
     if (deadCard.modifiers.includes('buff')) {
       const atkAdd = deadCard.buffAttackValue ?? 1;
       const defAdd = deadCard.buffDefenseValue ?? 1;
+      const buffedTargetIds = deadCard.buffedTargetIds;
 
       const nextBoard: GameCard[] = [];
       for (const card of currentBoard) {
-        const updatedCard = removeBuffFromCard(card, atkAdd, defAdd);
-        if (getEffectiveDefense(updatedCard) <= 0) {
-          deadMap.add(updatedCard.instanceId);
-          firedCards.push(updatedCard);
-          deadQueue.push(updatedCard);
+        const wasBuffed = buffedTargetIds !== undefined ? buffedTargetIds.includes(card.instanceId) : true;
+        if (wasBuffed) {
+          const updatedCard = removeBuffFromCard(card, atkAdd, defAdd);
+          if (getEffectiveDefense(updatedCard) <= 0) {
+            deadMap.add(updatedCard.instanceId);
+            firedCards.push(updatedCard);
+            deadQueue.push(updatedCard);
+          } else {
+            nextBoard.push(updatedCard);
+          }
         } else {
-          nextBoard.push(updatedCard);
+          nextBoard.push(card);
         }
       }
       currentBoard = nextBoard;

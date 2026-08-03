@@ -115,7 +115,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <strong className="text-amber-300">Escopo dos Eventos:</strong> Os eventos corporativos só têm efeito sobre os personagens que estão <strong className="text-white">trabalhando na mesa</strong> (comprados e colocados em campo).
             </p>
             <p className="text-xs text-slate-300">
-              <strong className="text-rose-400">Demissão em Cadeia (Morte de Buff):</strong> Quando uma carta com bônus de Buff morre, seu buff é removido dos colegas. Se isso diminuir a defesa total de algum colega para 0 ou menos, ele é <strong className="text-rose-400">DEMITIDO</strong> imediatamente em cadeia!
+              <strong className="text-rose-400">Demissão em Cadeia (Morte de Buff):</strong> Quando uma carta com bônus de Buff morre, seu buff é removido apenas dos colegas que foram afetados por ela. Se isso diminuir a defesa total de algum colega para 0 ou menos, ele é <strong className="text-rose-400">DEMITIDO</strong> imediatamente em cadeia!
             </p>
 
             <div className="space-y-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
