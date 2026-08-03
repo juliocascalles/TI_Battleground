@@ -1,4 +1,4 @@
-export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade' | 'enfraquecer';
+export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade' | 'enfraquecer' | 'lucro';
 
 export type CharacterGender = 'M' | 'F';
 

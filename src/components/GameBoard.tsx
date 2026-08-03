@@ -11,7 +11,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- STATE ---
@@ -68,6 +68,7 @@ export const GameBoard: React.FC = () => {
   const [hitCardId, setHitCardId] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [isGameStarted, setIsGameStarted] = useState<boolean>(false);
+  const [triageCount, setTriageCount] = useState<number>(0);
 
   // Modals & Sound
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
@@ -148,6 +149,7 @@ export const GameBoard: React.FC = () => {
     setHitCardId(null);
     setIsAnimating(false);
     setWinner(null);
+    setTriageCount(0);
     setIsGameStarted(true);
     setLogs([
       '🎮 Jogo iniciado! Mão máxima de 3 cartas. As cartas entram na mesa ao pagar o custo de Café.',
@@ -290,6 +292,47 @@ export const GameBoard: React.FC = () => {
 
     setSelectedBoardCardId(null);
     setSelectedAttackerId(null);
+  };
+
+  // Triagem: replaces cards in player's hand with 3 new cards drawn from the deck
+  const handleTriage = () => {
+    if (currentTurnOwner !== 'player' || isAnimating) return;
+
+    if (player.drawBlockedRounds && player.drawBlockedRounds > 0) {
+      setLogs(prev => [...prev, '🚫 Não é possível realizar a Triagem: Suas compras estão bloqueadas por licença maternidade!']);
+      return;
+    }
+
+    // Starting from 3rd triage attempt in the same round (triageCount >= 2), cost is 1 Coffee
+    const triageCost = triageCount >= 2 ? 1 : 0;
+    if (triageCost > 0 && player.coffee < triageCost) {
+      setLogs(prev => [...prev, '☕ Café insuficiente! A Triagem a partir da 3ª vez na rodada custa 1 ponto de Café.']);
+      return;
+    }
+
+    // Return current hand to deck and shuffle
+    const combinedDeck = [...deck, ...player.hand].sort(() => Math.random() - 0.5);
+
+    if (combinedDeck.length === 0) {
+      setLogs(prev => [...prev, '⚠️ Não há cartas disponíveis no baralho para realizar a Triagem!']);
+      return;
+    }
+
+    // Draw up to 3 cards from combined deck
+    const newHand = combinedDeck.splice(0, 3).map(c => ({ ...c, owner: 'player' as const }));
+
+    setSelectedHandCardId(null);
+    setDeck(combinedDeck);
+    setTriageCount(prev => prev + 1);
+    setPlayer(prev => ({
+      ...prev,
+      coffee: prev.coffee - triageCost,
+      hand: newHand,
+    }));
+
+    soundFx.playCardSound();
+    const costText = triageCost > 0 ? ' (Custo: 1 ☕)' : ' (Grátis)';
+    setLogs(prev => [...prev, `📋 Triagem realizada${costText}! Cartas da mão foram devolvidas e 3 novas cartas foram sacadas do baralho.`]);
   };
 
   // 2. Select Card on Player Board (Shows attributes panel and enables attack)
@@ -618,13 +661,18 @@ export const GameBoard: React.FC = () => {
     await new Promise(r => setTimeout(r, 1000));
 
     // --- STEP 2: COMPUTER TURN EXECUTION ---
+    const compLucroBonus = updatedC.board.filter(c => c.modifiers.includes('lucro')).length;
     let compState: PlayerState = {
       ...updatedC,
-      coffee: Math.min(10, updatedC.coffee + (turnNumber === 1 ? 0 : 2)),
+      coffee: Math.min(10, updatedC.coffee + (turnNumber === 1 ? 0 : 2) + compLucroBonus),
       hand: [...updatedC.hand],
       board: processBoardCardsTurn(updatedC.board, 'Computador'),
       drawBlockedRounds: Math.max(0, updatedC.drawBlockedRounds - 1),
     };
+
+    if (compLucroBonus > 0) {
+      setLogs(prev => [...prev, `💰 Modificador Lucro (Computador): +${compLucroBonus} Café gerado por cartas na mesa!`]);
+    }
 
     // Requirement 1: Computer draws up to 3 cards into hand
     const compNeeded = 3 - compState.hand.length;
@@ -759,9 +807,11 @@ export const GameBoard: React.FC = () => {
 
     setTurnNumber(prev => prev + 1);
     setCurrentTurnOwner('player');
+    setTriageCount(0);
 
     setPlayer(prevP => {
-      const nextCoffee = Math.min(10, prevP.coffee + 2);
+      const playerLucroBonus = prevP.board.filter(c => c.modifiers.includes('lucro')).length;
+      const nextCoffee = Math.min(10, prevP.coffee + 2 + playerLucroBonus);
       soundFx.coffeeSound();
 
       let drawBlocked = prevP.drawBlockedRounds;
@@ -783,6 +833,9 @@ export const GameBoard: React.FC = () => {
         }
       }
 
+      const profitMsg = playerLucroBonus > 0 ? ` (+${playerLucroBonus} 💰 Lucro)` : '';
+      setLogs(prev => [...prev, `👉 SEU TURNO! Ganhou +2 Café${profitMsg}.`]);
+
       return {
         ...prevP,
         coffee: nextCoffee,
@@ -799,7 +852,6 @@ export const GameBoard: React.FC = () => {
       ...prevC,
     }));
 
-    setLogs(prev => [...prev, '👉 SEU TURNO! Ganhou +2 Café.']);
     setIsAnimating(false);
   };
 
@@ -819,7 +871,7 @@ export const GameBoard: React.FC = () => {
               TI BATTLEGROUND
             </h1>
             <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300/80 bg-slate-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
-              v1.2026.07.31
+              v1.2026.08.03
             </span>
           </div>
           <span className="hidden sm:inline text-xs font-mono text-slate-400">
@@ -1074,6 +1126,11 @@ export const GameBoard: React.FC = () => {
                       <Target className="w-3 h-3 text-purple-300" /> Prioridade (Taunt)
                     </span>
                   )}
+                  {cardToShow.modifiers.includes('lucro') && (
+                    <span className="text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
+                      <TrendingUp className="w-3 h-3 text-amber-400" /> Lucro (+1 ☕ por turno)
+                    </span>
+                  )}
                   {cardToShow.isStunned && (() => {
                     const rounds = cardToShow.stunnedRounds !== undefined && cardToShow.stunnedRounds > 0 ? cardToShow.stunnedRounds : 1;
                     const turnsText = rounds === 1 ? '1 turno' : `${rounds} turnos`;
@@ -1184,19 +1241,32 @@ export const GameBoard: React.FC = () => {
 
           {/* Player Controls Bar & Hand */}
           <div className="border-t border-slate-800 pt-2 space-y-2">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-base">👤</span>
                 <strong className="text-emerald-300 font-bold">Sua Mão (Jogador)</strong>
                 <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{player.firedCount}</strong></span>
               </div>
 
-              {/* Player Coffee Meter */}
-              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-inner">
-                <Coffee className={`w-4 h-4 text-cyan-400 ${player.coffee === 0 ? 'animate-bounce text-red-400' : ''}`} />
-                <span className="font-black text-cyan-300 text-sm">
-                  {player.coffee} / 10 Café
-                </span>
+              <div className="flex items-center gap-2">
+                {/* Triagem Button */}
+                <button
+                  onClick={handleTriage}
+                  disabled={currentTurnOwner !== 'player' || isAnimating || (triageCount >= 2 && player.coffee < 1)}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold px-3 py-1 rounded-lg border border-emerald-400/40 shadow-sm transition-all cursor-pointer"
+                  title={triageCount >= 2 ? "Substituir cartas da mão (Custa 1 Café a partir da 3ª vez na rodada)" : `Substituir cartas da mão (Grátis na rodada - uso ${triageCount + 1}/2)`}
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>Triagem {triageCount >= 2 ? '(-1 ☕)' : '(Grátis)'}</span>
+                </button>
+
+                {/* Player Coffee Meter */}
+                <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-inner">
+                  <Coffee className={`w-4 h-4 text-cyan-400 ${player.coffee === 0 ? 'animate-bounce text-red-400' : ''}`} />
+                  <span className="font-black text-cyan-300 text-sm">
+                    {player.coffee} / 10 Café
+                  </span>
+                </div>
               </div>
             </div>
 

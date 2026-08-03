@@ -103,6 +103,10 @@ export function getModifierWeight(modifier: CardModifier, cardDefense: number): 
     // Reduced chance
     return 0.5;
   }
+  if (modifier === 'lucro') {
+    // Rare modifier
+    return 0.3;
+  }
   // Standard base chance for buff, ataque_duplo, enfraquecer
   return 1.0;
 }
@@ -139,7 +143,7 @@ export function pickWeightedModifiers(
 
 export function generateDeck(count: number = 48): GameCard[] {
   const deck: GameCard[] = [];
-  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
+  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
 
   for (let i = 0; i < count; i++) {
     // Pick one of the templates

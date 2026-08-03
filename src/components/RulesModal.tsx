@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Shield, Zap, Swords, Target, Coffee, Terminal, AlertTriangle } from 'lucide-react';
+import { X, Shield, Zap, Swords, Target, Coffee, Terminal, AlertTriangle, TrendingUp } from 'lucide-react';
 
 interface RulesModalProps {
   isOpen: boolean;
@@ -46,7 +46,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             <ul className="list-disc list-inside space-y-1 text-slate-300">
               <li><strong className="text-white">Café:</strong> Começa com 3. Ganha <strong className="text-cyan-300">+2 a cada turno</strong> (máximo 10). O café acumula.</li>
               <li><strong className="text-cyan-300">Bônus de Demissão:</strong> Ao demitir um personagem do adversário, você ganha <strong className="text-amber-300">+1 Café</strong> instantaneamente!</li>
-              <li><strong className="text-white">Compras de Carta:</strong> Só é feita nova compra no início do turno se sua mão tiver <strong className="text-amber-300">menos de 5 cartas</strong>.</li>
+              <li><strong className="text-white">Compras de Carta:</strong> No início do seu turno, você saca até preencher sua mão de <strong className="text-amber-300">3 cartas</strong>.</li>
+              <li><strong className="text-emerald-300">Triagem:</strong> Substitui a sua mão por 3 novas cartas do baralho. Grátis 2 vezes por rodada (custa 1 Café a partir da 3ª triagem na mesma rodada, e reseta o custo na rodada seguinte).</li>
               <li><strong className="text-rose-400">Ataque:</strong> Dano causado ao atacar cartas inimigas.</li>
               <li><strong className="text-emerald-400">Defesa (HP):</strong> Quando chega a 0 ou menos, o personagem é <strong>DEMITIDO</strong>.</li>
               <li><strong className="text-amber-400">Contrato PJ:</strong> Cartas com essa tag podem sofrer com eventos específicos como <em>Baixa Demanda</em>.</li>
@@ -88,11 +89,19 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2 col-span-1 sm:col-span-2">
+              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2">
                 <span className="text-lg shrink-0 mt-0.5">📉</span>
                 <div>
                   <strong className="text-cyan-400 block text-xs">Enfraquecer</strong>
                   <span className="text-xs text-slate-300">Ao atacar um inimigo, reduz os pontos de ataque dele pelo poder de enfraquecer da carta.</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2">
+                <TrendingUp className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-300 block text-xs">Lucro (Raro) 💰</strong>
+                  <span className="text-xs text-slate-300">Enquanto estiver em jogo na mesa, gera +1 de Café adicional para seu dono a cada turno.</span>
                 </div>
               </div>
             </div>

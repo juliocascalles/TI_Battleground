@@ -285,7 +285,7 @@ export function grantTempoDeServicoBonus(
   newModifiers: import('../types').CardModifier[];
 } {
   const effectiveDef = Math.max(1, getEffectiveDefense(card));
-  const possibleModifiers: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer'];
+  const possibleModifiers: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
   
   // Prefer modifiers not already present on the card
   const candidates = possibleModifiers.filter(m => !card.modifiers.includes(m));
