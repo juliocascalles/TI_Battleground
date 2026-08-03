@@ -1,5 +1,5 @@
 import { PlayerState, GameCard, AttackAnimation } from '../types';
-import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, getMaxAttacksAllowed, getEffectiveAttack, getEffectiveDefense, removeCardsWithCascade } from './rules';
+import { isValidAttackTarget, resolveCombat, getActualCardCost, applyPlayBuff, applyPlayHacker, getMaxAttacksAllowed, getEffectiveAttack, getEffectiveDefense, removeCardsWithCascade } from './rules';
 
 export interface AiTurnResult {
   updatedComputer: PlayerState;
@@ -53,6 +53,11 @@ export function executeAiTurn(
 
       // Apply buff to existing board allies if card has 'buff'
       computer.board = applyPlayBuff(cardToPlay, computer.board);
+      if (cardToPlay.modifiers.includes('hacker')) {
+        const hackerRes = applyPlayHacker(cardToPlay, computer.board);
+        computer.board = hackerRes.updatedAllyBoard;
+        actionsLog.push(...hackerRes.logs);
+      }
       computer.board.push(cardToPlay);
 
       actionsLog.push(`🤖 Computador colocou em campo: ${cardToPlay.name} (${cardToPlay.role}) por ${chosen.actualCost} Café!`);

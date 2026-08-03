@@ -214,6 +214,11 @@ export const CardView: React.FC<CardViewProps> = ({
                 <Target className="w-3.5 h-3.5 text-purple-300" /> Prior
               </span>
             )}
+            {card.modifiers.includes('hacker') && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-300 bg-amber-950/90 px-2 py-0.5 rounded border border-amber-500/70 shadow-sm">
+                🤡 Hacker
+              </span>
+            )}
             {card.modifiers.includes('lucro') && (
               <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-200 bg-amber-950/90 px-2 py-0.5 rounded border border-amber-500/70 shadow-sm">
                 <TrendingUp className="w-3.5 h-3.5 text-amber-400" /> Lucro (+1 ☕)

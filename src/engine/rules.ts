@@ -167,6 +167,89 @@ export function applyPlayBuff(playedCard: GameCard, allyBoard: GameCard[]): Game
 }
 
 /**
+ * Applies Hacker effect when a card with 'hacker' modifier is played onto the board.
+ * Randomly grants 1 new modifier to up to 3 allies currently on the board.
+ */
+export function applyPlayHacker(
+  playedCard: GameCard,
+  allyBoard: GameCard[]
+): {
+  updatedAllyBoard: GameCard[];
+  logs: string[];
+} {
+  if (!playedCard.modifiers.includes('hacker')) {
+    return { updatedAllyBoard: allyBoard, logs: [] };
+  }
+
+  const logs: string[] = [];
+  const otherAllies = allyBoard.filter(c => c.instanceId !== playedCard.instanceId);
+
+  if (otherAllies.length === 0) {
+    logs.push(`🤡 HACKER! ${playedCard.name} ativou o modo Hacker, mas não havia outros colegas em jogo na mesa.`);
+    return { updatedAllyBoard: allyBoard, logs };
+  }
+
+  const shuffled = [...otherAllies].sort(() => Math.random() - 0.5);
+  const selectedAllies = shuffled.slice(0, 3);
+  const selectedIds = new Set(selectedAllies.map(a => a.instanceId));
+
+  const availablePool: import('../types').CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
+
+  const updatedOtherAllies = otherAllies.map(card => {
+    if (!selectedIds.has(card.instanceId)) return card;
+
+    const candidateMods = availablePool.filter(m => !card.modifiers.includes(m));
+    if (candidateMods.length === 0) return card;
+
+    const newMod = candidateMods[Math.floor(Math.random() * candidateMods.length)];
+    const updatedCard: GameCard = {
+      ...card,
+      modifiers: [...card.modifiers, newMod],
+    };
+
+    if (newMod === 'protecao') {
+      updatedCard.hasProtection = true;
+    } else if (newMod === 'buff') {
+      updatedCard.buffAttackValue = Math.floor(Math.random() * 3) + 1;
+      updatedCard.buffDefenseValue = Math.floor(Math.random() * 3) + 1;
+    } else if (newMod === 'enfraquecer') {
+      updatedCard.weakenPower = Math.floor(Math.random() * 3) + 1;
+    }
+
+    return updatedCard;
+  });
+
+  let finalBoard = updatedOtherAllies;
+  // If any selected ally got 'buff', apply that buff to the board
+  const newlyBuffedCards = finalBoard.filter(
+    c => selectedIds.has(c.instanceId) && c.modifiers.includes('buff')
+  );
+  for (const buffedCard of newlyBuffedCards) {
+    finalBoard = applyPlayBuff(buffedCard, finalBoard);
+  }
+
+  const modDescriptions = selectedAllies.map(a => {
+    const updated = finalBoard.find(c => c.instanceId === a.instanceId);
+    const addedMod = updated?.modifiers.find(m => !a.modifiers.includes(m));
+    const labelMap: Record<string, string> = {
+      protecao: 'Proteção 🛡️',
+      buff: 'Buff ⚡',
+      ataque_duplo: 'Ataque Duplo ⚔️',
+      prioridade: 'Prioridade 🎯',
+      enfraquecer: 'Enfraquecer 📉',
+      lucro: 'Lucro 💰',
+    };
+    return `${a.name} (+${addedMod ? labelMap[addedMod] || addedMod : 'Bônus'})`;
+  });
+
+  logs.push(
+    `🤡 HACKER! ${playedCard.name} hackeou o sistema e concedeu novos modificadores para ${selectedAllies.length} colega(s) na mesa: ${modDescriptions.join(', ')}.`
+  );
+
+  return { updatedAllyBoard: finalBoard, logs };
+}
+
+/**
  * Calculates current actual coffee cost to play a card, factoring in event penalties.
  */
 export function getActualCardCost(card: GameCard, player: PlayerState): number {

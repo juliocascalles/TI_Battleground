@@ -104,6 +104,14 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                   <span className="text-xs text-slate-300">Enquanto estiver em jogo na mesa, gera +1 de Café adicional para seu dono a cada turno.</span>
                 </div>
               </div>
+
+              <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-start gap-2">
+                <span className="text-xl shrink-0 mt-0.5">🤡</span>
+                <div>
+                  <strong className="text-amber-300 block text-xs">Hacker (Raro - Silas Kow) 🤡</strong>
+                  <span className="text-xs text-slate-300">Exclusivo do Silas Kow. Ao ser colocado em jogo na mesa, hackeia o sistema e sorteia novos modificadores para até 3 colegas em jogo.</span>
+                </div>
+              </div>
             </div>
           </section>
 

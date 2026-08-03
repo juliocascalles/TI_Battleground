@@ -75,7 +75,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     baseDefense: 3,
     isPJ: false,
     avatarSvg: 'silas', 
-    flavorText: 'Pessimista e paranóico.',
+    flavorText: 'Pessimista e paranóico. Pode possuir o atributo raro Hacker 🤡.',
     quote: 'É só eu virar as costas que a procedure vai travar'
   },
   {
@@ -93,7 +93,10 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   }
 ];
 
-export function getModifierWeight(modifier: CardModifier, cardDefense: number): number {
+export function getModifierWeight(modifier: CardModifier, cardDefense: number, templateId?: string): number {
+  if (modifier === 'hacker') {
+    return templateId === 'silas_kow' ? 0.6 : 0;
+  }
   if (modifier === 'protecao') {
     // Inversely proportional to defense (e.g. 1 def => 3.0, 3 def => 1.0, 6 def => 0.5)
     const def = Math.max(1, cardDefense);
@@ -114,20 +117,21 @@ export function getModifierWeight(modifier: CardModifier, cardDefense: number): 
 export function pickWeightedModifiers(
   candidates: CardModifier[],
   count: number,
-  cardDefense: number
+  cardDefense: number,
+  templateId?: string
 ): CardModifier[] {
   const pool = [...candidates];
   const selected: CardModifier[] = [];
 
   for (let i = 0; i < count; i++) {
-    const validCandidates = pool.filter(m => getModifierWeight(m, cardDefense) > 0);
+    const validCandidates = pool.filter(m => getModifierWeight(m, cardDefense, templateId) > 0);
     if (validCandidates.length === 0) break;
 
-    const totalWeight = validCandidates.reduce((sum, m) => sum + getModifierWeight(m, cardDefense), 0);
+    const totalWeight = validCandidates.reduce((sum, m) => sum + getModifierWeight(m, cardDefense, templateId), 0);
     let rand = Math.random() * totalWeight;
 
     for (const mod of validCandidates) {
-      const w = getModifierWeight(mod, cardDefense);
+      const w = getModifierWeight(mod, cardDefense, templateId);
       if (rand < w) {
         selected.push(mod);
         const idx = pool.indexOf(mod);
@@ -143,7 +147,7 @@ export function pickWeightedModifiers(
 
 export function generateDeck(count: number = 36): GameCard[] {
   const deck: GameCard[] = [];
-  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro'];
+  const possibleModifiers: CardModifier[] = ['protecao', 'buff', 'ataque_duplo', 'prioridade', 'enfraquecer', 'lucro', 'hacker'];
 
   for (let i = 0; i < count; i++) {
     // Pick one of the templates
@@ -162,7 +166,7 @@ export function generateDeck(count: number = 36): GameCard[] {
     const numModifiers = rand < 0.18 ? 2 : rand < 0.78 ? 1 : 0;
     const cardModifiers: CardModifier[] = [];
     if (numModifiers > 0) {
-      const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, defense);
+      const chosen = pickWeightedModifiers(possibleModifiers, numModifiers, defense, template.id);
       cardModifiers.push(...chosen);
     }
 

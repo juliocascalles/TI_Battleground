@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameCard, PlayerState, GlobalEvent } from '../types';
 import { generateDeck } from '../data/cardsData';
-import { isValidAttackTarget, resolveCombat, applyPlayBuff, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack, removeCardsWithCascade, grantTempoDeServicoBonus } from '../engine/rules';
+import { isValidAttackTarget, resolveCombat, applyPlayBuff, applyPlayHacker, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack, removeCardsWithCascade, grantTempoDeServicoBonus } from '../engine/rules';
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
 
@@ -249,7 +249,17 @@ export const GameBoard: React.FC = () => {
     }
 
     // Apply buff if card has 'buff'
-    const updatedBoard = applyPlayBuff(playedCard, player.board);
+    let updatedBoard = applyPlayBuff(playedCard, player.board);
+
+    // Apply hacker if card has 'hacker'
+    if (playedCard.modifiers.includes('hacker')) {
+      const hackerRes = applyPlayHacker(playedCard, updatedBoard);
+      updatedBoard = hackerRes.updatedAllyBoard;
+      if (hackerRes.logs.length > 0) {
+        setLogs(prev => [...prev, ...hackerRes.logs]);
+      }
+    }
+
     updatedBoard.push(playedCard);
 
     setPlayer(prev => ({
@@ -738,7 +748,14 @@ export const GameBoard: React.FC = () => {
           cardToPlay.stunnedRounds = 0;
         }
 
-        const newBoard = applyPlayBuff(cardToPlay, compState.board);
+        let newBoard = applyPlayBuff(cardToPlay, compState.board);
+        if (cardToPlay.modifiers.includes('hacker')) {
+          const hackerRes = applyPlayHacker(cardToPlay, newBoard);
+          newBoard = hackerRes.updatedAllyBoard;
+          if (hackerRes.logs.length > 0) {
+            setLogs(prev => [...prev, ...hackerRes.logs]);
+          }
+        }
         newBoard.push(cardToPlay);
 
         compState = {
@@ -1117,6 +1134,16 @@ export const GameBoard: React.FC = () => {
                   {cardToShow.modifiers.includes('buff') && (
                     <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
                       <Zap className="w-3 h-3 text-amber-400" /> Buff (+{cardToShow.buffAttackValue ?? 1}/+{cardToShow.buffDefenseValue ?? 1})
+                    </span>
+                  )}
+                  {cardToShow.modifiers.includes('enfraquecer') && (
+                    <span className="text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/50 flex items-center gap-1 font-semibold">
+                      📉 Enfraquecer (-{cardToShow.weakenPower ?? 1} Ataque do oponente)
+                    </span>
+                  )}
+                  {cardToShow.modifiers.includes('hacker') && (
+                    <span className="text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1 font-semibold">
+                      🤡 Hacker (Coringa: Sorteia modificadores para até 3 colegas em jogo)
                     </span>
                   )}
                   {cardToShow.modifiers.includes('ataque_duplo') && (
