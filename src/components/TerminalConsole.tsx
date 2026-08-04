@@ -22,7 +22,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-lime-400" />
           <span className="font-bold text-lime-400 text-xs tracking-wider">
-            C:\TI_BATTLEGROUND\events.sys
+            C:\TI_BATTLEGROUND\v1.2026.08.04\events.sys
           </span>
         </div>
         <div className="flex items-center gap-3">

@@ -39,6 +39,17 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             </p>
           </section>
 
+          <section className="bg-slate-950 p-3.5 rounded-xl border border-purple-500/30">
+            <h3 className="font-bold text-purple-300 text-base mb-1 flex items-center gap-2">
+              🎮 Modos de Jogo (v1.2026.08.04)
+            </h3>
+            <ul className="text-slate-300 space-y-1.5 text-xs">
+              <li><strong className="text-cyan-300">👤 Humano vs 🤖 Computador:</strong> Partida solo tradicional contra a inteligência artificial.</li>
+              <li><strong className="text-purple-300">🤖 Computador vs 🤖 Simulação Demo:</strong> Partida 100% automatizada entre 2 IAs com controles de Play/Pausa e Velocidade para visualizar e aprender todas as mecânicas.</li>
+              <li><strong className="text-emerald-300">👥 Humano vs 👤 Humano (Multiplayer):</strong> Partida online em tempo real via WebSocket. Conecte com um amigo na mesma sala para batalhar!</li>
+            </ul>
+          </section>
+
           <section className="space-y-2">
             <h3 className="font-bold text-cyan-400 text-base flex items-center gap-2">
               <Coffee className="w-4 h-4 text-cyan-400" /> Atributos e Café

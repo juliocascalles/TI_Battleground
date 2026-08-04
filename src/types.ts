@@ -1,5 +1,15 @@
 export type CardModifier = 'protecao' | 'buff' | 'ataque_duplo' | 'prioridade' | 'enfraquecer' | 'lucro' | 'hacker';
 
+export type PlayerController = 'human' | 'computer';
+
+export type GameMode =
+  | 'human_vs_computer'
+  | 'computer_vs_human'
+  | 'computer_vs_computer'
+  | 'human_vs_human';
+
+export const APP_VERSION = '1.2026.08.04';
+
 export type CharacterGender = 'M' | 'F';
 
 export interface CardTemplate {

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameCard, PlayerState, GlobalEvent } from '../types';
+import { GameCard, PlayerState, GlobalEvent, PlayerController, GameMode, APP_VERSION } from '../types';
 import { generateDeck } from '../data/cardsData';
 import { isValidAttackTarget, resolveCombat, applyPlayBuff, applyPlayHacker, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack, removeCardsWithCascade, grantTempoDeServicoBonus } from '../engine/rules';
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
+import { MultiplayerClient } from '../engine/multiplayer';
 
 import { CardView, getEventStatusIcon } from './CardView';
 import { CardBack } from './CardBack';
@@ -11,9 +12,25 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp, Ghost } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp, Ghost, User, Bot, Globe, Pause, FastForward, StepForward, Copy, Check, Users, RefreshCw } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
+  // --- PLAYER CONTROLLERS & GAME MODES ---
+  const [p1Type, setP1Type] = useState<PlayerController>('human');
+  const [p2Type, setP2Type] = useState<PlayerController>('computer');
+
+  // Simulation (Demo) Settings
+  const [simRunning, setSimRunning] = useState<boolean>(true);
+  const [simSpeed, setSimSpeed] = useState<number>(1); // 1 = 1x (2000ms), 2 = 2x (1200ms), 3 = 3x (600ms)
+
+  // WebSocket Multiplayer Settings
+  const [mpRoomId, setMpRoomId] = useState<string>('SALA1');
+  const [mpConnected, setMpConnected] = useState<boolean>(false);
+  const [mpRole, setMpRole] = useState<'p1' | 'p2' | null>(null);
+  const [mpP2Connected, setMpP2Connected] = useState<boolean>(false);
+  const [mpCopied, setMpCopied] = useState<boolean>(false);
+  const mpClientRef = useRef<MultiplayerClient | null>(null);
+
   // --- STATE ---
   const [deck, setDeck] = useState<GameCard[]>([]);
   const [player, setPlayer] = useState<PlayerState>({
@@ -713,6 +730,18 @@ export const GameBoard: React.FC = () => {
 
     await new Promise(r => setTimeout(r, 1000));
 
+    if (p2Type === 'computer') {
+      await runComputerTurn();
+    } else {
+      setIsAnimating(false);
+    }
+  };
+
+  const runComputerTurn = async () => {
+    let currentDeck = [...deck];
+    let updatedC = { ...computerRef.current };
+    let updatedP = { ...playerRef.current };
+
     // --- STEP 2: COMPUTER TURN EXECUTION ---
     const compLucroBonus = updatedC.board.filter(c => c.modifiers.includes('lucro')).length;
     let compState: PlayerState = {
@@ -924,63 +953,317 @@ export const GameBoard: React.FC = () => {
     setIsMuted(muted);
   };
 
+  // --- WEBSOCKET MULTIPLAYER CONNECTION & SYNC ---
+  const connectMultiplayer = (roomIdToJoin?: string) => {
+    const targetRoom = (roomIdToJoin || mpRoomId || 'SALA1').toUpperCase();
+    setMpRoomId(targetRoom);
+
+    if (mpClientRef.current) {
+      mpClientRef.current.disconnect();
+    }
+
+    const client = new MultiplayerClient();
+    mpClientRef.current = client;
+
+    client.connect(targetRoom, {
+      onStateReceived: (receivedState, log) => {
+        if (receivedState) {
+          if (receivedState.player) setPlayer(receivedState.player);
+          if (receivedState.computer) setComputer(receivedState.computer);
+          if (receivedState.deck) setDeck(receivedState.deck);
+          if (receivedState.currentTurnOwner) setCurrentTurnOwner(receivedState.currentTurnOwner);
+          if (receivedState.turnNumber) setTurnNumber(receivedState.turnNumber);
+          if (receivedState.activeEvent !== undefined) setActiveEvent(receivedState.activeEvent);
+        }
+        if (log) {
+          setLogs(prev => [...prev, log]);
+        }
+      },
+      onLogReceived: (log) => {
+        setLogs(prev => [...prev, log]);
+      },
+      onStatusChange: (status) => {
+        setMpConnected(status.connected);
+        setMpRole(status.role);
+        setMpP2Connected(status.p2Connected);
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (p1Type === 'human' && p2Type === 'human') {
+      connectMultiplayer(mpRoomId);
+    } else {
+      if (mpClientRef.current) {
+        mpClientRef.current.disconnect();
+        mpClientRef.current = null;
+      }
+      setMpConnected(false);
+    }
+  }, [p1Type, p2Type]);
+
+  const syncMultiplayerState = (customState?: any, log?: string) => {
+    if (p1Type === 'human' && p2Type === 'human' && mpClientRef.current) {
+      const stateToSync = customState || {
+        player: playerRef.current,
+        computer: computerRef.current,
+        deck,
+        currentTurnOwner,
+        turnNumber,
+        activeEvent,
+      };
+      mpClientRef.current.sendStateUpdate(stateToSync, log);
+    }
+  };
+
+  // --- AUTOMATED DEMO SIMULATION (Both Computer) ---
+  const runAiStep = async () => {
+    if (isAnimating || winner) return;
+    if (p1Type !== 'computer' && p2Type !== 'computer') return;
+
+    setLogs(prev => [...prev, `🤖 [Simulação Demo] ${currentTurnOwner === 'player' ? 'Jogador 1 (Computador Azul)' : 'Jogador 2 (Computador Vermelho)'} executando jogada...`]);
+    await runComputerTurn();
+  };
+
+  useEffect(() => {
+    if (!isGameStarted || winner || isAnimating) return;
+    if (p1Type !== 'computer' || p2Type !== 'computer') return;
+    if (!simRunning) return;
+
+    const delay = simSpeed === 3 ? 600 : simSpeed === 2 ? 1200 : 2000;
+    const timer = setTimeout(() => {
+      runAiStep();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isGameStarted, winner, isAnimating, p1Type, p2Type, simRunning, simSpeed, currentTurnOwner, turnNumber]);
+
   return (
     <div className="w-full min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none overflow-x-hidden">
       {/* 1. TOP HEADER BAR */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-between shadow-xl z-20">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-purple-900 to-indigo-900 px-3 py-1 rounded-lg border border-purple-500/50 shadow-lg">
-            <span className="text-xl">⚔️</span>
-            <h1 className="font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-300 to-yellow-400 text-base sm:text-lg tracking-wider">
-              TI BATTLEGROUND
-            </h1>
-            <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300/80 bg-slate-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
-              v1.2026.08.03
+      <header className="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 flex flex-col gap-2 shadow-xl z-20">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Logo and Version */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-purple-900 to-indigo-900 px-2.5 py-1 rounded-lg border border-purple-500/50 shadow-lg">
+              <span className="text-lg sm:text-xl">⚔️</span>
+              <h1 className="font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-300 to-yellow-400 text-sm sm:text-lg tracking-wider">
+                TI BATTLEGROUND
+              </h1>
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300 bg-slate-950/80 px-1.5 py-0.5 rounded border border-cyan-500/40 shadow-inner">
+                v1.2026.08.04
+              </span>
+            </div>
+            <span className="hidden md:inline text-xs font-mono text-slate-400">
+              Rodada #{turnNumber}
             </span>
           </div>
-          <span className="hidden sm:inline text-xs font-mono text-slate-400">
-            Rodada #{turnNumber}
-          </span>
-        </div>
 
-        {/* Turn Status Badge */}
-        <div className="flex items-center gap-2">
-          <div
-            className={`px-4 py-1.5 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all ${
-              currentTurnOwner === 'player'
-                ? 'bg-emerald-950 text-emerald-300 border-emerald-500 shadow-emerald-500/30 animate-pulse'
-                : 'bg-purple-950 text-purple-300 border-purple-500 shadow-purple-500/30'
-            }`}
-          >
-            <span className={`w-2 h-2 rounded-full ${currentTurnOwner === 'player' ? 'bg-emerald-400' : 'bg-purple-400'}`} />
-            {currentTurnOwner === 'player' ? '👉 SEU TURNO' : '🤖 TURNO DO COMPUTADOR'}
+          {/* CONTROLLER SELECTION: PLAYER 1 vs PLAYER 2 */}
+          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 p-1 rounded-xl">
+            {/* Player 1 Controller */}
+            <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-cyan-500/30">
+              <span className="text-[10px] font-bold text-cyan-400 uppercase hidden sm:inline">P1 Azul:</span>
+              <button
+                onClick={() => setP1Type('human')}
+                className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p1Type === 'human'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Jogador 1 controlado por Humano"
+              >
+                <User className="w-3 h-3" /> Humano
+              </button>
+              <button
+                onClick={() => setP1Type('computer')}
+                className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p1Type === 'computer'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Jogador 1 controlado por Computador"
+              >
+                <Bot className="w-3 h-3" /> Bot
+              </button>
+            </div>
+
+            <span className="text-slate-500 text-xs font-black px-1">VS</span>
+
+            {/* Player 2 Controller */}
+            <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-purple-500/30">
+              <span className="text-[10px] font-bold text-purple-400 uppercase hidden sm:inline">P2 Vermelho:</span>
+              <button
+                onClick={() => setP2Type('human')}
+                className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p2Type === 'human'
+                    ? 'bg-rose-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Jogador 2 controlado por Humano"
+              >
+                <User className="w-3 h-3" /> Humano
+              </button>
+              <button
+                onClick={() => setP2Type('computer')}
+                className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p2Type === 'computer'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Jogador 2 controlado por Computador"
+              >
+                <Bot className="w-3 h-3" /> Bot
+              </button>
+            </div>
+          </div>
+
+          {/* Turn Status Badge */}
+          <div className="flex items-center gap-2">
+            <div
+              className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2 border shadow-lg transition-all ${
+                currentTurnOwner === 'player'
+                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500 shadow-emerald-500/30 animate-pulse'
+                  : 'bg-purple-950 text-purple-300 border-purple-500 shadow-purple-500/30'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${currentTurnOwner === 'player' ? 'bg-emerald-400' : 'bg-purple-400'}`} />
+              {p1Type === 'human' && p2Type === 'computer'
+                ? (currentTurnOwner === 'player' ? '👉 SEU TURNO' : '🤖 TURNO DO COMPUTADOR')
+                : p1Type === 'computer' && p2Type === 'computer'
+                ? (currentTurnOwner === 'player' ? '🤖 TURNO P1 (AZUL)' : '🤖 TURNO P2 (VERMELHO)')
+                : (currentTurnOwner === 'player' ? '👉 TURNO P1 (AZUL)' : '👉 TURNO P2 (VERMELHO)')}
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsRulesOpen(true)}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer"
+              title="Regras do Jogo"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleMute}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              title={isMuted ? 'Ativar Som' : 'Mutar Som'}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            </button>
+            <button
+              onClick={initGame}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              title="Reiniciar Jogo"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsRulesOpen(true)}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer"
-            title="Regras do Jogo"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </button>
-          <button
-            onClick={toggleMute}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-            title={isMuted ? 'Ativar Som' : 'Mutar Som'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
-          </button>
-          <button
-            onClick={initGame}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-            title="Reiniciar Jogo"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
+        {/* DEMO SIMULATION BAR (Computer vs Computer) */}
+        {p1Type === 'computer' && p2Type === 'computer' && (
+          <div className="bg-purple-950/90 border border-purple-500/50 rounded-xl p-2 flex flex-wrap items-center justify-between gap-2 text-xs shadow-xl animate-fade-in">
+            <div className="flex items-center gap-2 font-bold text-purple-200">
+              <Bot className="w-4 h-4 text-purple-400 animate-bounce" />
+              <span>🎮 MODO DEMO: Simulação Automática Bot vs Bot</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSimRunning(!simRunning)}
+                className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  simRunning
+                    ? 'bg-amber-600 hover:bg-amber-500 text-white shadow'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow'
+                }`}
+              >
+                {simRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                {simRunning ? 'Pausar' : 'Continuar'}
+              </button>
+
+              <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-700">
+                <span className="text-[10px] text-slate-400 px-1 font-mono">Velocidade:</span>
+                {[1, 2, 3].map(speed => (
+                  <button
+                    key={speed}
+                    onClick={() => setSimSpeed(speed)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      simSpeed === speed
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {speed}x
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={runAiStep}
+                disabled={isAnimating}
+                className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                title="Avançar uma jogada manualmente"
+              >
+                <StepForward className="w-3.5 h-3.5" /> Passo a Passo
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* MULTIPLAYER WEBSOCKET BAR (Human vs Human) */}
+        {p1Type === 'human' && p2Type === 'human' && (
+          <div className="bg-cyan-950/90 border border-cyan-500/50 rounded-xl p-2 flex flex-wrap items-center justify-between gap-2 text-xs shadow-xl animate-fade-in">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <strong className="text-cyan-200">Multiplayer Online via WebSocket:</strong>
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={mpRoomId}
+                  onChange={e => setMpRoomId(e.target.value.toUpperCase())}
+                  className="bg-slate-900 border border-cyan-500/40 rounded px-2 py-0.5 text-cyan-300 font-mono text-xs w-24 text-center font-bold uppercase"
+                  placeholder="SALA1"
+                />
+                <button
+                  onClick={() => connectMultiplayer(mpRoomId)}
+                  className="px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Conectar
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  setMpCopied(true);
+                  setTimeout(() => setMpCopied(false), 2000);
+                }}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition-all cursor-pointer"
+              >
+                {mpCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                {mpCopied ? 'Link Copiado!' : 'Copiar Link / Sala'}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border ${
+                  mpConnected ? 'bg-emerald-950 text-emerald-300 border-emerald-500' : 'bg-rose-950 text-rose-300 border-rose-500'
+                }`}>
+                  {mpConnected ? `🟢 Conectado (${mpRole === 'p1' ? 'P1 Azul' : 'P2 Vermelho'})` : '🔴 Desconectado'}
+                </span>
+
+                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border ${
+                  mpP2Connected ? 'bg-cyan-950 text-cyan-300 border-cyan-500' : 'bg-amber-950 text-amber-300 border-amber-500'
+                }`}>
+                  {mpP2Connected ? '👥 P2 On' : '⏳ Aguardando P2...'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* MAIN GAME AREA */}
@@ -989,8 +1272,8 @@ export const GameBoard: React.FC = () => {
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
           <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
             <div className="flex items-center gap-2">
-              <span className="text-base">🤖</span>
-              <strong className="text-purple-300 font-bold">Computador (AI Bot)</strong>
+              <span className="text-base">{p2Type === 'human' ? '👤' : '🤖'}</span>
+              <strong className="text-purple-300 font-bold">{p2Type === 'human' ? 'Jogador 2 (Vermelho)' : 'Computador 2 (AI Bot)'}</strong>
               <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{computer.firedCount}</strong></span>
             </div>
 
@@ -1355,8 +1638,8 @@ export const GameBoard: React.FC = () => {
           <div className="border-t border-slate-800 pt-2 space-y-2">
             <div className="flex items-center justify-between text-xs flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-base">👤</span>
-                <strong className="text-emerald-300 font-bold">Sua Mão (Jogador)</strong>
+                <span className="text-base">{p1Type === 'human' ? '👤' : '🤖'}</span>
+                <strong className="text-emerald-300 font-bold">{p1Type === 'human' ? 'Sua Mão (Jogador 1 Azul)' : 'Mão P1 (Computador 1 Azul)'}</strong>
                 <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{player.firedCount}</strong></span>
               </div>
 
