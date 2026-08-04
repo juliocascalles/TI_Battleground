@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "rooms": {
+      "title": "Game Rooms",
+      "description": "Real-time game room state sync for TI Battleground multiplayer",
+      "properties": {
+        "roomId": { "type": "string", "description": "Unique room code" },
+        "p1Connected": { "type": "boolean", "description": "Is Player 1 connected" },
+        "p2Connected": { "type": "boolean", "description": "Is Player 2 connected" },
+        "lastUpdated": { "type": "string", "description": "Timestamp of last update" },
+        "lastUpdatedBy": { "type": "string", "description": "Role of player who made the update" },
+        "gameState": { "type": "object", "description": "Complete serializable game state object" },
+        "logs": { "type": "array", "description": "Game logs array" }
+      },
+      "required": ["roomId"],
+      "security": {
+        "read": "true",
+        "write": "true"
+      }
+    }
+  }
+}

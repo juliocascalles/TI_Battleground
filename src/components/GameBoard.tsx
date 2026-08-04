@@ -4,7 +4,7 @@ import { generateDeck } from '../data/cardsData';
 import { isValidAttackTarget, resolveCombat, applyPlayBuff, applyPlayHacker, getActualCardCost, getMaxAttacksAllowed, getEffectiveDefense, getEffectiveAttack, removeCardsWithCascade, grantTempoDeServicoBonus } from '../engine/rules';
 import { checkShouldTriggerEvent, triggerRandomEvent } from '../engine/eventsEngine';
 import { soundFx } from '../utils/audio';
-import { MultiplayerClient } from '../engine/multiplayer';
+import { FirebaseMultiplayerClient } from '../engine/firebaseMultiplayer';
 
 import { CardView, getEventStatusIcon } from './CardView';
 import { CardBack } from './CardBack';
@@ -29,7 +29,7 @@ export const GameBoard: React.FC = () => {
   const [mpRole, setMpRole] = useState<'p1' | 'p2' | null>(null);
   const [mpP2Connected, setMpP2Connected] = useState<boolean>(false);
   const [mpCopied, setMpCopied] = useState<boolean>(false);
-  const mpClientRef = useRef<MultiplayerClient | null>(null);
+  const mpClientRef = useRef<FirebaseMultiplayerClient | null>(null);
 
   // --- STATE ---
   const [deck, setDeck] = useState<GameCard[]>([]);
@@ -1169,7 +1169,7 @@ export const GameBoard: React.FC = () => {
     }
   }, []);
 
-  // --- WEBSOCKET MULTIPLAYER CONNECTION & SYNC ---
+  // --- FIREBASE FIRESTORE MULTIPLAYER CONNECTION & SYNC ---
   const connectMultiplayer = (roomIdToJoin?: string) => {
     const targetRoom = (roomIdToJoin || mpRoomId || 'SALA1').toUpperCase().trim();
     setMpRoomId(targetRoom);
@@ -1178,7 +1178,7 @@ export const GameBoard: React.FC = () => {
       mpClientRef.current.disconnect();
     }
 
-    const client = new MultiplayerClient();
+    const client = new FirebaseMultiplayerClient();
     mpClientRef.current = client;
 
     client.connect(
@@ -1263,7 +1263,7 @@ export const GameBoard: React.FC = () => {
         turnNumber,
         activeEvent,
       };
-      mpClientRef.current.sendStateUpdate(stateToSync, log);
+      mpClientRef.current.syncState(stateToSync, log);
     }
   };
 
@@ -1327,9 +1327,46 @@ export const GameBoard: React.FC = () => {
             </span>
           </div>
 
-          {/* CONTROLLER SELECTION: PLAYER 1 vs PLAYER 2 */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 p-1 rounded-xl">
-            {/* Player 1 Controller */}
+          {/* CONTROLLER SELECTION: QUICK PRESETS & PLAYER TYPES */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950/80 border border-slate-800 p-1 rounded-xl">
+            {/* Quick Mode Presets */}
+            <div className="flex items-center gap-1 border-r border-slate-800 pr-1.5 mr-0.5 hidden md:flex">
+              <button
+                onClick={() => { setP1Type('human'); setP2Type('computer'); }}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p1Type === 'human' && p2Type === 'computer'
+                    ? 'bg-cyan-600/30 text-cyan-200 border border-cyan-500/50 shadow'
+                    : 'text-slate-400 hover:text-slate-200 bg-slate-900/60'
+                }`}
+                title="Modo Padrão: Azul = Humano, Vermelho = Bot"
+              >
+                👤 VS 🤖 Humano vs Bot
+              </button>
+              <button
+                onClick={() => { setP1Type('human'); setP2Type('human'); }}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p1Type === 'human' && p2Type === 'human'
+                    ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow'
+                    : 'text-slate-400 hover:text-slate-200 bg-slate-900/60'
+                }`}
+                title="Modo Multiplayer Online: Humano vs Humano"
+              >
+                👥 Online 1v1
+              </button>
+              <button
+                onClick={() => { setP1Type('computer'); setP2Type('computer'); }}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  p1Type === 'computer' && p2Type === 'computer'
+                    ? 'bg-amber-600/30 text-amber-200 border border-amber-500/50 shadow'
+                    : 'text-slate-400 hover:text-slate-200 bg-slate-900/60'
+                }`}
+                title="Modo Demo: Bot vs Bot"
+              >
+                🤖 Demo
+              </button>
+            </div>
+
+            {/* Player 1 Controller (Azul = Humano) */}
             <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-cyan-500/30">
               <span className="text-[10px] font-bold text-cyan-400 uppercase hidden sm:inline">P1 Azul:</span>
               <button
@@ -1339,7 +1376,7 @@ export const GameBoard: React.FC = () => {
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Jogador 1 controlado por Humano"
+                title="P1 Azul controlado por Humano"
               >
                 <User className="w-3 h-3" /> Humano
               </button>
@@ -1350,7 +1387,7 @@ export const GameBoard: React.FC = () => {
                     ? 'bg-purple-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Jogador 1 controlado por Computador"
+                title="P1 Azul controlado por Bot"
               >
                 <Bot className="w-3 h-3" /> Bot
               </button>
@@ -1358,7 +1395,7 @@ export const GameBoard: React.FC = () => {
 
             <span className="text-slate-500 text-xs font-black px-1">VS</span>
 
-            {/* Player 2 Controller */}
+            {/* Player 2 Controller (Vermelho = Bot) */}
             <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-purple-500/30">
               <span className="text-[10px] font-bold text-purple-400 uppercase hidden sm:inline">P2 Vermelho:</span>
               <button
@@ -1368,7 +1405,7 @@ export const GameBoard: React.FC = () => {
                     ? 'bg-rose-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Jogador 2 controlado por Humano"
+                title="P2 Vermelho controlado por Humano"
               >
                 <User className="w-3 h-3" /> Humano
               </button>
@@ -1379,7 +1416,7 @@ export const GameBoard: React.FC = () => {
                     ? 'bg-purple-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Jogador 2 controlado por Computador"
+                title="P2 Vermelho controlado por Bot"
               >
                 <Bot className="w-3 h-3" /> Bot
               </button>
@@ -1486,7 +1523,7 @@ export const GameBoard: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
-                <strong className="text-cyan-200 text-xs sm:text-sm">Multiplayer Online via Código da Sala:</strong>
+                <strong className="text-cyan-200 text-xs sm:text-sm">Multiplayer Online em Tempo Real (Firebase Firestore):</strong>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
