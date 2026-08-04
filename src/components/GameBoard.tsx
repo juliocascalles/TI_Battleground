@@ -64,6 +64,8 @@ export const GameBoard: React.FC = () => {
   playerRef.current = player;
   const computerRef = useRef(computer);
   computerRef.current = computer;
+  const deckRef = useRef(deck);
+  deckRef.current = deck;
 
   const [currentTurnOwner, setCurrentTurnOwner] = useState<'player' | 'computer'>('player');
   const [turnNumber, setTurnNumber] = useState<number>(1);
@@ -737,8 +739,206 @@ export const GameBoard: React.FC = () => {
     }
   };
 
+  // --- PLAYER 1 (AZUL) AI TURN EXECUTION ---
+  const runPlayer1AiTurn = async () => {
+    let currentDeck = [...deckRef.current];
+    let updatedP = { ...playerRef.current };
+    let updatedC = { ...computerRef.current };
+
+    const p1LucroBonus = updatedP.board.filter(c => c.modifiers.includes('lucro')).length;
+    let p1State: PlayerState = {
+      ...updatedP,
+      coffee: Math.min(10, updatedP.coffee + (turnNumber === 1 ? 0 : 2) + p1LucroBonus),
+      hand: [...updatedP.hand],
+      board: processBoardCardsTurn(updatedP.board, 'Computador 1 Azul'),
+      drawBlockedRounds: Math.max(0, updatedP.drawBlockedRounds - 1),
+    };
+
+    if (p1LucroBonus > 0) {
+      setLogs(prev => [...prev, `💰 Modificador Lucro (Computador Azul): +${p1LucroBonus} Café gerado por cartas na mesa!`]);
+    }
+
+    // Draw up to 3 cards into P1 hand
+    const p1Needed = 3 - p1State.hand.length;
+    if (updatedP.drawBlockedRounds > 0) {
+      setLogs(prev => [...prev, '🤖 Computador Azul com compras bloqueadas por licença maternidade.']);
+    } else if (p1Needed > 0 && currentDeck.length > 0) {
+      const drawnCards = currentDeck.splice(0, p1Needed).map(c => ({ ...c, owner: 'player' as const }));
+      p1State.hand = [...p1State.hand, ...drawnCards];
+      setDeck(currentDeck);
+      setLogs(prev => [...prev, `🤖 Computador Azul comprou ${drawnCards.length} carta(s) (Mão: ${p1State.hand.length}/3).`]);
+    }
+
+    setPlayer({ ...p1State });
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    // A. AI Play Cards from Hand Step-by-Step
+    if (p1State.canPlayCardsThisTurn) {
+      let safetyLoop = 0;
+
+      while (safetyLoop < 5) {
+        safetyLoop++;
+
+        if (p1State.board.length >= 5) break;
+
+        const playableCards = p1State.hand
+          .map((card, index) => ({ card, index, actualCost: getActualCardCost(card, p1State) }))
+          .filter(item => item.actualCost <= p1State.coffee);
+
+        if (playableCards.length === 0) break;
+
+        playableCards.sort((a, b) => {
+          const scoreA = (a.card.modifiers.includes('buff') ? 3 : 0) + (a.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(a.card) + getEffectiveDefense(a.card);
+          const scoreB = (b.card.modifiers.includes('buff') ? 3 : 0) + (b.card.modifiers.includes('prioridade') ? 2 : 0) + getEffectiveAttack(b.card) + getEffectiveDefense(b.card);
+          return scoreB - scoreA;
+        });
+
+        const chosen = playableCards[0];
+        soundFx.playCardSound();
+
+        const newHand = [...p1State.hand];
+        const [cardToPlay] = newHand.splice(chosen.index, 1);
+        cardToPlay.owner = 'player';
+        cardToPlay.turnsOnBoard = 0;
+
+        const isInactiveOnBirth = cardToPlay.canBeBornActive !== undefined ? !cardToPlay.canBeBornActive : Math.random() < 0.9;
+        if (isInactiveOnBirth) {
+          cardToPlay.isStunned = true;
+          cardToPlay.stunnedRounds = 1;
+          cardToPlay.stunReason = 'Inativa (recém-contratada)';
+        } else {
+          cardToPlay.isStunned = false;
+          cardToPlay.stunnedRounds = 0;
+        }
+
+        if ((cardToPlay.role || '').toUpperCase().includes('RH') || cardToPlay.templateId === 'thais_tudano') {
+          cardToPlay.isInvisible = true;
+        }
+
+        let newBoard = applyPlayBuff(cardToPlay, p1State.board);
+        if (cardToPlay.modifiers.includes('hacker')) {
+          const hackerRes = applyPlayHacker(cardToPlay, newBoard);
+          newBoard = hackerRes.updatedAllyBoard;
+          if (hackerRes.logs.length > 0) {
+            setLogs(prev => [...prev, ...hackerRes.logs]);
+          }
+        }
+        newBoard.push(cardToPlay);
+
+        p1State = {
+          ...p1State,
+          coffee: p1State.coffee - chosen.actualCost,
+          hand: newHand,
+          board: newBoard,
+        };
+
+        setPlayer({ ...p1State });
+        setLogs(prev => [...prev, `🤖 Computador Azul colocou em campo: ${cardToPlay.name} (${cardToPlay.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ''}!`]);
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+
+    // B. AI Attacks Step-by-Step with Animation
+    if (p1State.canAttackThisTurn) {
+      let attackLoop = true;
+      let attackSafety = 0;
+
+      while (attackLoop && attackSafety < 6) {
+        attackSafety++;
+
+        const latestP1Board = playerRef.current.board;
+        const latestP2Board = computerRef.current.board;
+
+        const readyAttackers = latestP1Board.filter(c => {
+          const maxAttacks = getMaxAttacksAllowed(c);
+          return getEffectiveDefense(c) > 0 && c.hasAttackedThisTurn < maxAttacks && (!c.isPJ || !c.pjBlocked) && !c.isStunned;
+        });
+
+        const aliveDefenders = latestP2Board.filter(c => getEffectiveDefense(c) > 0);
+
+        if (readyAttackers.length === 0 || aliveDefenders.length === 0) {
+          attackLoop = false;
+          break;
+        }
+
+        const attacker = readyAttackers[0];
+        const validTargets = aliveDefenders.filter(target => isValidAttackTarget(target, latestP2Board));
+
+        if (validTargets.length === 0) {
+          attackLoop = false;
+          break;
+        }
+
+        validTargets.sort((a, b) => {
+          const killA = getEffectiveDefense(a) <= getEffectiveAttack(attacker) ? 10 : 0;
+          const killB = getEffectiveDefense(b) <= getEffectiveAttack(attacker) ? 10 : 0;
+          return (killB + getEffectiveAttack(b)) - (killA + getEffectiveAttack(a));
+        });
+
+        const defender = validTargets[0];
+
+        await runAttackSequence(attacker, defender, 'up');
+      }
+    }
+
+    // Return unplayed cards in P1 hand back to deck
+    if (p1State.hand.length > 0) {
+      currentDeck = [...currentDeck, ...p1State.hand].sort(() => Math.random() - 0.5);
+      setPlayer(prevP => ({ ...prevP, hand: [] }));
+      setDeck(currentDeck);
+      setLogs(prev => [...prev, '🤖 As cartas não jogadas do Computador Azul foram devolvidas ao baralho.']);
+    }
+
+    // Switch turn to Computer 2
+    await new Promise(r => setTimeout(r, 800));
+
+    setCurrentTurnOwner('computer');
+    setTriageCount(0);
+
+    if (p2Type === 'human') {
+      setComputer(prevC => {
+        const compLucroBonus = prevC.board.filter(c => c.modifiers.includes('lucro')).length;
+        const nextCoffee = Math.min(10, prevC.coffee + 2 + compLucroBonus);
+        soundFx.coffeeSound();
+
+        let drawBlocked = prevC.drawBlockedRounds;
+        let newHand = [...prevC.hand];
+        let curDeck = [...currentDeck];
+
+        if (drawBlocked > 0) {
+          drawBlocked -= 1;
+        } else {
+          const compNeeded = 3 - newHand.length;
+          if (compNeeded > 0 && curDeck.length > 0) {
+            const drawnCards = curDeck.splice(0, compNeeded).map(c => ({ ...c, owner: 'computer' as const }));
+            newHand = [...newHand, ...drawnCards];
+            setDeck(curDeck);
+            setLogs(prev => [...prev, `📥 Jogador 2 comprou ${drawnCards.length} nova(s) carta(s)!`]);
+          }
+        }
+
+        setLogs(prev => [...prev, '👉 TURNO DO JOGADOR 2!']);
+
+        return {
+          ...prevC,
+          coffee: nextCoffee,
+          hand: newHand,
+          canAttackThisTurn: true,
+          canPlayCardsThisTurn: true,
+          drawBlockedRounds: drawBlocked,
+          extraCoffeeCostRounds: Math.max(0, prevC.extraCoffeeCostRounds - 1),
+          board: processBoardCardsTurn(prevC.board, 'Jogador 2'),
+        };
+      });
+    }
+
+    setIsAnimating(false);
+  };
+
+  // --- PLAYER 2 (VERMELHO) AI TURN EXECUTION ---
   const runComputerTurn = async () => {
-    let currentDeck = [...deck];
+    let currentDeck = [...deckRef.current];
     let updatedC = { ...computerRef.current };
     let updatedP = { ...playerRef.current };
 
@@ -748,23 +948,23 @@ export const GameBoard: React.FC = () => {
       ...updatedC,
       coffee: Math.min(10, updatedC.coffee + (turnNumber === 1 ? 0 : 2) + compLucroBonus),
       hand: [...updatedC.hand],
-      board: processBoardCardsTurn(updatedC.board, 'Computador'),
+      board: processBoardCardsTurn(updatedC.board, 'Computador 2 Vermelho'),
       drawBlockedRounds: Math.max(0, updatedC.drawBlockedRounds - 1),
     };
 
     if (compLucroBonus > 0) {
-      setLogs(prev => [...prev, `💰 Modificador Lucro (Computador): +${compLucroBonus} Café gerado por cartas na mesa!`]);
+      setLogs(prev => [...prev, `💰 Modificador Lucro (Computador Vermelho): +${compLucroBonus} Café gerado por cartas na mesa!`]);
     }
 
     // Requirement 1: Computer draws up to 3 cards into hand
     const compNeeded = 3 - compState.hand.length;
     if (updatedC.drawBlockedRounds > 0) {
-      setLogs(prev => [...prev, '🤖 Computador com compras bloqueadas por licença maternidade.']);
+      setLogs(prev => [...prev, '🤖 Computador Vermelho com compras bloqueadas por licença maternidade.']);
     } else if (compNeeded > 0 && currentDeck.length > 0) {
       const drawnCards = currentDeck.splice(0, compNeeded).map(c => ({ ...c, owner: 'computer' as const }));
       compState.hand = [...compState.hand, ...drawnCards];
       setDeck(currentDeck);
-      setLogs(prev => [...prev, `🤖 Computador comprou ${drawnCards.length} carta(s) (Mão: ${compState.hand.length}/3).`]);
+      setLogs(prev => [...prev, `🤖 Computador Vermelho comprou ${drawnCards.length} carta(s) (Mão: ${compState.hand.length}/3).`]);
     }
 
     setComputer({ ...compState });
@@ -839,7 +1039,7 @@ export const GameBoard: React.FC = () => {
         };
 
         setComputer({ ...compState });
-        setLogs(prev => [...prev, `🤖 Computador colocou em campo: ${cardToPlay.name} (${cardToPlay.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ''}!`]);
+        setLogs(prev => [...prev, `🤖 Computador Vermelho colocou em campo: ${cardToPlay.name} (${cardToPlay.role})${isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ''}!`]);
         await new Promise(r => setTimeout(r, 1200));
       }
     }
@@ -892,58 +1092,57 @@ export const GameBoard: React.FC = () => {
     if (compState.hand.length > 0) {
       currentDeck = [...currentDeck, ...compState.hand].sort(() => Math.random() - 0.5);
       setComputer(prevC => ({ ...prevC, hand: [] }));
-      setLogs(prev => [...prev, '🤖 As cartas não jogadas do computador foram devolvidas ao baralho.']);
+      setDeck(currentDeck);
+      setLogs(prev => [...prev, '🤖 As cartas não jogadas do Computador Vermelho foram devolvidas ao baralho.']);
     }
 
-    // Return turn to Player
+    // Return turn to Player 1
     await new Promise(r => setTimeout(r, 800));
 
     setTurnNumber(prev => prev + 1);
     setCurrentTurnOwner('player');
     setTriageCount(0);
 
-    setPlayer(prevP => {
-      const playerLucroBonus = prevP.board.filter(c => c.modifiers.includes('lucro')).length;
-      const nextCoffee = Math.min(10, prevP.coffee + 2 + playerLucroBonus);
-      soundFx.coffeeSound();
+    if (p1Type === 'human') {
+      setPlayer(prevP => {
+        const playerLucroBonus = prevP.board.filter(c => c.modifiers.includes('lucro')).length;
+        const nextCoffee = Math.min(10, prevP.coffee + 2 + playerLucroBonus);
+        soundFx.coffeeSound();
 
-      let drawBlocked = prevP.drawBlockedRounds;
-      let newHand = [...prevP.hand];
-      let curDeck = [...currentDeck];
+        let drawBlocked = prevP.drawBlockedRounds;
+        let newHand = [...prevP.hand];
+        let curDeck = [...currentDeck];
 
-      if (drawBlocked > 0) {
-        drawBlocked -= 1;
-        setLogs(prev => [...prev, '🚫 Suas compras estão bloqueadas por licença maternidade!']);
-      } else {
-        // Requirement 1: Draw up to 3 cards into hand
-        const playerNeeded = 3 - newHand.length;
-        if (playerNeeded > 0 && curDeck.length > 0) {
-          const drawnCards = curDeck.splice(0, playerNeeded).map(c => ({ ...c, owner: 'player' as const }));
-          newHand = [...newHand, ...drawnCards];
-          setDeck(curDeck);
-          const cardText = drawnCards.length === 3 ? 'Três novas cartas foram colocadas na sua mão!' : `${drawnCards.length} nova(s) carta(s) foram colocadas na sua mão!`;
-          setLogs(prev => [...prev, `📥 ${cardText} (Mão: ${newHand.length}/3)`]);
+        if (drawBlocked > 0) {
+          drawBlocked -= 1;
+          setLogs(prev => [...prev, '🚫 Suas compras estão bloqueadas por licença maternidade!']);
+        } else {
+          // Requirement 1: Draw up to 3 cards into hand
+          const playerNeeded = 3 - newHand.length;
+          if (playerNeeded > 0 && curDeck.length > 0) {
+            const drawnCards = curDeck.splice(0, playerNeeded).map(c => ({ ...c, owner: 'player' as const }));
+            newHand = [...newHand, ...drawnCards];
+            setDeck(curDeck);
+            const cardText = drawnCards.length === 3 ? 'Três novas cartas foram colocadas na sua mão!' : `${drawnCards.length} nova(s) carta(s) foram colocadas na sua mão!`;
+            setLogs(prev => [...prev, `📥 ${cardText} (Mão: ${newHand.length}/3)`]);
+          }
         }
-      }
 
-      const profitMsg = playerLucroBonus > 0 ? ` (+${playerLucroBonus} 💰 Lucro)` : '';
-      setLogs(prev => [...prev, `👉 SEU TURNO! Ganhou +2 Café${profitMsg}.`]);
+        const profitMsg = playerLucroBonus > 0 ? ` (+${playerLucroBonus} 💰 Lucro)` : '';
+        setLogs(prev => [...prev, `👉 SEU TURNO! Ganhou +2 Café${profitMsg}.`]);
 
-      return {
-        ...prevP,
-        coffee: nextCoffee,
-        hand: newHand,
-        canAttackThisTurn: true,
-        canPlayCardsThisTurn: true,
-        drawBlockedRounds: drawBlocked,
-        extraCoffeeCostRounds: Math.max(0, prevP.extraCoffeeCostRounds - 1),
-        board: processBoardCardsTurn(prevP.board, 'Jogador'),
-      };
-    });
-
-    setComputer(prevC => ({
-      ...prevC,
-    }));
+        return {
+          ...prevP,
+          coffee: nextCoffee,
+          hand: newHand,
+          canAttackThisTurn: true,
+          canPlayCardsThisTurn: true,
+          drawBlockedRounds: drawBlocked,
+          extraCoffeeCostRounds: Math.max(0, prevP.extraCoffeeCostRounds - 1),
+          board: processBoardCardsTurn(prevP.board, 'Jogador'),
+        };
+      });
+    }
 
     setIsAnimating(false);
   };
@@ -1016,19 +1215,30 @@ export const GameBoard: React.FC = () => {
     }
   };
 
-  // --- AUTOMATED DEMO SIMULATION (Both Computer) ---
+  // --- AUTOMATED DEMO SIMULATION (Both Computer or AI Bot Turns) ---
   const runAiStep = async () => {
     if (isAnimating || winner) return;
-    if (p1Type !== 'computer' && p2Type !== 'computer') return;
 
-    setLogs(prev => [...prev, `🤖 [Simulação Demo] ${currentTurnOwner === 'player' ? 'Jogador 1 (Computador Azul)' : 'Jogador 2 (Computador Vermelho)'} executando jogada...`]);
-    await runComputerTurn();
+    if (currentTurnOwner === 'player' && p1Type === 'computer') {
+      setIsAnimating(true);
+      setLogs(prev => [...prev, '🤖 [Simulação Demo] Turno de Jogador 1 (Computador Azul)...']);
+      await runPlayer1AiTurn();
+    } else if (currentTurnOwner === 'computer' && p2Type === 'computer') {
+      setIsAnimating(true);
+      setLogs(prev => [...prev, '🤖 [Simulação Demo] Turno de Jogador 2 (Computador Vermelho)...']);
+      await runComputerTurn();
+    }
   };
 
   useEffect(() => {
     if (!isGameStarted || winner || isAnimating) return;
-    if (p1Type !== 'computer' || p2Type !== 'computer') return;
     if (!simRunning) return;
+
+    const isCurrentOwnerAi =
+      (currentTurnOwner === 'player' && p1Type === 'computer') ||
+      (currentTurnOwner === 'computer' && p2Type === 'computer');
+
+    if (!isCurrentOwnerAi) return;
 
     const delay = simSpeed === 3 ? 600 : simSpeed === 2 ? 1200 : 2000;
     const timer = setTimeout(() => {
