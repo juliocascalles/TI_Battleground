@@ -8,7 +8,7 @@ export type GameMode =
   | 'computer_vs_computer'
   | 'human_vs_human';
 
-export const APP_VERSION = '1.2026.08.04';
+export const APP_VERSION = '1.2026.08.05';
 
 export type CharacterGender = 'M' | 'F';
 

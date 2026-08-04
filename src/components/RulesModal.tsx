@@ -41,7 +41,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           <section className="bg-slate-950 p-3.5 rounded-xl border border-purple-500/30">
             <h3 className="font-bold text-purple-300 text-base mb-1 flex items-center gap-2">
-              🎮 Modos de Jogo (v1.2026.08.04)
+              🎮 Modos de Jogo (v1.2026.08.05)
             </h3>
             <ul className="text-slate-300 space-y-1.5 text-xs">
               <li><strong className="text-cyan-300">👤 Humano vs 🤖 Computador:</strong> Partida solo tradicional contra a inteligência artificial.</li>

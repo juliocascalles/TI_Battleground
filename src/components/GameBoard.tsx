@@ -19,6 +19,15 @@ export const GameBoard: React.FC = () => {
   const [p1Type, setP1Type] = useState<PlayerController>('human');
   const [p2Type, setP2Type] = useState<PlayerController>('computer');
 
+  // Requirement: If Azul (P1) is Bot and Vermelho (P2) is Humano, correct to Azul = Humano and Vermelho = Bot
+  useEffect(() => {
+    if (p1Type === 'computer' && p2Type === 'human') {
+      setP1Type('human');
+      setP2Type('computer');
+      setLogs(prev => [...prev, '⚙️ Correção automática: Jogador Azul definido como Humano e Jogador Vermelho como Bot.']);
+    }
+  }, [p1Type, p2Type]);
+
   // Simulation (Demo) Settings
   const [simRunning, setSimRunning] = useState<boolean>(true);
   const [simSpeed, setSimSpeed] = useState<number>(1); // 1 = 1x (2000ms), 2 = 2x (1200ms), 3 = 3x (600ms)
@@ -236,14 +245,19 @@ export const GameBoard: React.FC = () => {
 
   // 1. Play Card from Hand
   const handlePlayCardFromHand = (card: GameCard, index: number) => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
-    if (!player.canPlayCardsThisTurn) {
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const activeLocal = isP2Local ? computer : player;
+    const setActiveLocal = isP2Local ? setComputer : setPlayer;
+
+    if (!isMyTurn || isAnimating) return;
+    if (!activeLocal.canPlayCardsThisTurn) {
       setLogs(prev => [...prev, '⚠️ Você está atordoado por evento e não pode jogar novas cartas!']);
       return;
     }
 
-    const actualCost = getActualCardCost(card, player);
-    if (player.coffee < actualCost) {
+    const actualCost = getActualCardCost(card, activeLocal);
+    if (activeLocal.coffee < actualCost) {
       setLogs(prev => [...prev, `☕ Café insuficiente! Você precisa de ${actualCost} Café.`]);
       return;
     }
@@ -251,9 +265,9 @@ export const GameBoard: React.FC = () => {
     soundFx.playCardSound();
 
     // Deduct coffee and move card to board
-    const newHand = [...player.hand];
+    const newHand = [...activeLocal.hand];
     const [playedCard] = newHand.splice(index, 1);
-    playedCard.owner = 'player';
+    playedCard.owner = isP2Local ? 'computer' : 'player';
     playedCard.turnsOnBoard = 0;
 
     // Requirement: Check if card can be born active
@@ -272,7 +286,7 @@ export const GameBoard: React.FC = () => {
     }
 
     // Apply buff if card has 'buff'
-    let updatedBoard = applyPlayBuff(playedCard, player.board);
+    let updatedBoard = applyPlayBuff(playedCard, activeLocal.board);
 
     // Apply hacker if card has 'hacker'
     if (playedCard.modifiers.includes('hacker')) {
@@ -285,7 +299,7 @@ export const GameBoard: React.FC = () => {
 
     updatedBoard.push(playedCard);
 
-    setPlayer(prev => ({
+    setActiveLocal(prev => ({
       ...prev,
       coffee: prev.coffee - actualCost,
       hand: newHand,
@@ -293,19 +307,24 @@ export const GameBoard: React.FC = () => {
     }));
 
     const rhStatusMsg = playedCard.isInvisible ? ' 🕵️‍♀️ (RH Invisível / Verso)' : isInactiveOnBirth ? ' ⚠️ (Inativa no 1º turno)' : ' ✓ (Ativa no 1º dia)';
-    setLogs(prev => [...prev, `🃏 Você colocou em campo: ${playedCard.name} (${playedCard.role})${rhStatusMsg}.`]);
+    const playerName = isP2Local ? 'Jogador 2 (Vermelho)' : 'Jogador 1 (Azul)';
+    setLogs(prev => [...prev, `🃏 [${playerName}] colocou em campo: ${playedCard.name} (${playedCard.role})${rhStatusMsg}.`]);
   };
 
   // Requirement 5: Demissão voluntária button handler
   const handleVoluntaryResignation = (card: GameCard) => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const setActiveLocal = isP2Local ? setComputer : setPlayer;
+
+    if (!isMyTurn || isAnimating) return;
 
     // Requirement 5: se a carta tem custo > 1, o café retornado na demissão voluntária é o custo - 1
     const refundCoffee = card.cost > 1 ? (card.cost - 1) : 0;
 
     soundFx.playCardSound();
 
-    setPlayer(prev => {
+    setActiveLocal(prev => {
       const res = removeCardsWithCascade(prev.board, [card.instanceId], { isVoluntaryResignation: true });
       const extraFired = res.allFiredCards.length - 1;
       if (extraFired > 0) {
@@ -330,25 +349,30 @@ export const GameBoard: React.FC = () => {
 
   // Triagem: replaces cards in player's hand with 3 new cards drawn from the deck
   const handleTriage = () => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const activeLocal = isP2Local ? computer : player;
+    const setActiveLocal = isP2Local ? setComputer : setPlayer;
 
-    if (player.drawBlockedRounds && player.drawBlockedRounds > 0) {
-      setLogs(prev => [...prev, '🚫 Não é possível realizar a Triagem: Suas compras estão bloqueadas por licença maternidade!']);
+    if (!isMyTurn || isAnimating) return;
+
+    if (activeLocal.drawBlockedRounds && activeLocal.drawBlockedRounds > 0) {
+      setLogs(prev => [...prev, '🚫 Não é possible realizar a Triagem: Suas compras estão bloqueadas por licença maternidade!']);
       return;
     }
 
     // RH characters on board grant +1 free triage each
-    const playerRhCount = player.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
-    const maxFreeTriages = 2 + playerRhCount;
+    const localRhCount = activeLocal.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
+    const maxFreeTriages = 2 + localRhCount;
 
     const triageCost = triageCount >= maxFreeTriages ? 1 : 0;
-    if (triageCost > 0 && player.coffee < triageCost) {
+    if (triageCost > 0 && activeLocal.coffee < triageCost) {
       setLogs(prev => [...prev, `☕ Café insuficiente! A Triagem a partir da ${maxFreeTriages + 1}ª vez na rodada custa 1 ponto de Café.`]);
       return;
     }
 
     // Return current hand to deck and shuffle
-    const combinedDeck = [...deck, ...player.hand].sort(() => Math.random() - 0.5);
+    const combinedDeck = [...deck, ...activeLocal.hand].sort(() => Math.random() - 0.5);
 
     if (combinedDeck.length === 0) {
       setLogs(prev => [...prev, '⚠️ Não há cartas disponíveis no baralho para realizar a Triagem!']);
@@ -356,12 +380,13 @@ export const GameBoard: React.FC = () => {
     }
 
     // Draw up to 3 cards from combined deck
-    const newHand = combinedDeck.splice(0, 3).map(c => ({ ...c, owner: 'player' as const }));
+    const owner = isP2Local ? 'computer' as const : 'player' as const;
+    const newHand = combinedDeck.splice(0, 3).map(c => ({ ...c, owner }));
 
     setSelectedHandCardId(null);
     setDeck(combinedDeck);
     setTriageCount(prev => prev + 1);
-    setPlayer(prev => ({
+    setActiveLocal(prev => ({
       ...prev,
       coffee: prev.coffee - triageCost,
       hand: newHand,
@@ -374,8 +399,13 @@ export const GameBoard: React.FC = () => {
 
   // RH Invisibility ability (Costs 1 Coffee, covers card with back/verso, cannot attack or be attacked for 1 turn)
   const handleRHInvisibility = (card: GameCard) => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
-    if (player.coffee < 1) {
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const activeLocal = isP2Local ? computer : player;
+    const setActiveLocal = isP2Local ? setComputer : setPlayer;
+
+    if (!isMyTurn || isAnimating) return;
+    if (activeLocal.coffee < 1) {
       setLogs(prev => [...prev, '☕ Café insuficiente para ativar a Invisibilidade do RH (Custa 1 ☕)!']);
       return;
     }
@@ -384,7 +414,7 @@ export const GameBoard: React.FC = () => {
       return;
     }
 
-    setPlayer(prev => ({
+    setActiveLocal(prev => ({
       ...prev,
       coffee: Math.max(0, prev.coffee - 1),
       board: prev.board.map(c => c.instanceId === card.instanceId ? { ...c, isInvisible: true } : c),
@@ -398,17 +428,21 @@ export const GameBoard: React.FC = () => {
     setLogs(prev => [...prev, `🕵️‍♀️ ${card.name} (RH) ativou a Invisibilidade por 1 ☕! A carta ficou invisível (verso) e não poderá atacar nem ser atacada até o próximo turno.`]);
   };
 
-  // 2. Select Card on Player Board (Shows attributes panel and enables attack)
-  const handleSelectPlayerBoardCard = (card: GameCard) => {
+  // 2. Select Card on Local Board (Shows attributes panel and enables attack)
+  const handleSelectLocalBoardCard = (card: GameCard) => {
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const activeLocal = isP2Local ? computer : player;
+
     setSelectedHandCardId(null);
     setSelectedBoardCardId(prev => prev === card.instanceId ? null : card.instanceId);
 
-    if (currentTurnOwner !== 'player' || isAnimating) return;
+    if (!isMyTurn || isAnimating) return;
     if (card.isInvisible) {
       setLogs(prev => [...prev, `🕵️‍♀️ ${card.name} está invisível neste turno (verso da carta) e não pode atacar!`]);
       return;
     }
-    if (!player.canAttackThisTurn) {
+    if (!activeLocal.canAttackThisTurn) {
       setLogs(prev => [...prev, '⚠️ Você está impedido de atacar neste turno por evento!']);
       return;
     }
@@ -573,13 +607,18 @@ export const GameBoard: React.FC = () => {
     setSelectedAttackerId(null);
   };
 
-  // 3. Attack or Select Enemy Card on Computer Board
+  // 3. Attack or Select Enemy Card on Remote Board
   const handleAttackEnemyCard = async (defender: GameCard) => {
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+    const activeLocal = isP2Local ? computer : player;
+    const activeRemote = isP2Local ? player : computer;
+
     setSelectedHandCardId(null);
 
     // If player has a selected attacker, run attack
-    if (currentTurnOwner === 'player' && selectedAttackerId && !isAnimating) {
-      const attacker = player.board.find(c => c.instanceId === selectedAttackerId);
+    if (isMyTurn && selectedAttackerId && !isAnimating) {
+      const attacker = activeLocal.board.find(c => c.instanceId === selectedAttackerId);
       if (attacker) {
         if (attacker.isStunned || attacker.isPregnant || (attacker.isPJ && attacker.pjBlocked) || getEffectiveDefense(attacker) <= 0) {
           setLogs(prev => [...prev, `⚠️ ${attacker.name} está inativa ou bloqueada e não pode atacar neste turno!`]);
@@ -588,7 +627,7 @@ export const GameBoard: React.FC = () => {
         }
 
         // Validate Priority rule
-        if (!isValidAttackTarget(defender, computer.board)) {
+        if (!isValidAttackTarget(defender, activeRemote.board)) {
           setLogs(prev => [...prev, '🎯 REGRA DE PRIORIDADE: Você é obrigado a atacar a carta inimiga com Prioridade primeiro!']);
           setSelectedBoardCardId(defender.instanceId);
           return;
@@ -603,7 +642,7 @@ export const GameBoard: React.FC = () => {
       }
     }
 
-    // Otherwise, toggle selection of enemy card on computer board to inspect attributes
+    // Otherwise, toggle selection of enemy card on remote board to inspect attributes
     setSelectedBoardCardId(prev => prev === defender.instanceId ? null : defender.instanceId);
   };
 
@@ -668,13 +707,15 @@ export const GameBoard: React.FC = () => {
     return updatedBoard;
   };
 
-  // --- END PLAYER TURN & TRIGGER AI TURN ---
+  // --- END TURN HANDLER ---
   const handleEndTurn = async () => {
-    if (currentTurnOwner !== 'player' || isAnimating) return;
+    const isP2Local = mpRole === 'p2';
+    const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+
+    if (!isMyTurn || isAnimating) return;
 
     setIsAnimating(true);
 
-    // Keep player board as is at turn end; board status will process at start of player's next turn
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
     setSelectedBoardCardId(null);
@@ -683,10 +724,18 @@ export const GameBoard: React.FC = () => {
     let updatedP = { ...player };
     let updatedC = { ...computer };
 
-    if (updatedP.hand.length > 0) {
-      currentDeck = [...currentDeck, ...updatedP.hand].sort(() => Math.random() - 0.5);
-      updatedP.hand = [];
-      setLogs(prev => [...prev, '🔄 Suas cartas não jogadas da mão foram devolvidas ao baralho.']);
+    if (isP2Local) {
+      if (updatedC.hand.length > 0) {
+        currentDeck = [...currentDeck, ...updatedC.hand].sort(() => Math.random() - 0.5);
+        updatedC.hand = [];
+        setLogs(prev => [...prev, '🔄 Suas cartas não jogadas da mão foram devolvidas ao baralho.']);
+      }
+    } else {
+      if (updatedP.hand.length > 0) {
+        currentDeck = [...currentDeck, ...updatedP.hand].sort(() => Math.random() - 0.5);
+        updatedP.hand = [];
+        setLogs(prev => [...prev, '🔄 Suas cartas não jogadas da mão foram devolvidas ao baralho.']);
+      }
     }
 
     // 1. Event Check
@@ -726,13 +775,15 @@ export const GameBoard: React.FC = () => {
     setPlayer(updatedP);
     setComputer(updatedC);
 
-    // Switch turn to Computer
-    setCurrentTurnOwner('computer');
-    setLogs(prev => [...prev, '🤖 Turno do Computador em andamento...']);
+    const nextTurnOwner = isP2Local ? 'player' : 'computer';
+    const nextPlayerLabel = isP2Local ? 'Jogador 1 (Azul)' : (p2Type === 'human' ? 'Jogador 2 (Vermelho)' : 'Computador 2');
+    setCurrentTurnOwner(nextTurnOwner);
+    setTriageCount(0);
+    setLogs(prev => [...prev, `👉 Turno passado para ${nextPlayerLabel}!`]);
 
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 800));
 
-    if (p2Type === 'computer') {
+    if (nextTurnOwner === 'computer' && p2Type === 'computer') {
       await runComputerTurn();
     } else {
       setIsAnimating(false);
@@ -1319,7 +1370,7 @@ export const GameBoard: React.FC = () => {
                 TI BATTLEGROUND
               </h1>
               <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-300 bg-slate-950/80 px-1.5 py-0.5 rounded border border-cyan-500/40 shadow-inner">
-                v1.2026.08.04
+                v1.2026.08.05
               </span>
             </div>
             <span className="hidden md:inline text-xs font-mono text-slate-400">
@@ -1376,12 +1427,20 @@ export const GameBoard: React.FC = () => {
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="P1 Azul controlado por Humano"
+                title="P1 Azul controlled by Human"
               >
                 <User className="w-3 h-3" /> Humano
               </button>
               <button
-                onClick={() => setP1Type('computer')}
+                onClick={() => {
+                  if (p2Type === 'human') {
+                    setP1Type('human');
+                    setP2Type('computer');
+                    setLogs(prev => [...prev, '⚙️ Correção: Jogador Azul definido como Humano e Jogador Vermelho como Bot.']);
+                  } else {
+                    setP1Type('computer');
+                  }
+                }}
                 className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
                   p1Type === 'computer'
                     ? 'bg-purple-600 text-white shadow'
@@ -1399,7 +1458,15 @@ export const GameBoard: React.FC = () => {
             <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-purple-500/30">
               <span className="text-[10px] font-bold text-purple-400 uppercase hidden sm:inline">P2 Vermelho:</span>
               <button
-                onClick={() => setP2Type('human')}
+                onClick={() => {
+                  if (p1Type === 'computer') {
+                    setP1Type('human');
+                    setP2Type('computer');
+                    setLogs(prev => [...prev, '⚙️ Correção: Jogador Azul definido como Humano e Jogador Vermelho como Bot.']);
+                  } else {
+                    setP2Type('human');
+                  }
+                }}
                 className={`p-1 sm:px-2 sm:py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
                   p2Type === 'human'
                     ? 'bg-rose-600 text-white shadow'
@@ -1597,79 +1664,93 @@ export const GameBoard: React.FC = () => {
 
       {/* MAIN GAME AREA */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col justify-between gap-3">
-        {/* 2. OPPONENT / COMPUTER ZONE (TOP) */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-base">{p2Type === 'human' ? '👤' : '🤖'}</span>
-              <strong className="text-purple-300 font-bold">{p2Type === 'human' ? 'Jogador 2 (Vermelho)' : 'Computador 2 (AI Bot)'}</strong>
-              <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{computer.firedCount}</strong></span>
-            </div>
+        {/* 2. OPPONENT ZONE (TOP) - ALWAYS SHOWS REMOTE PLAYER */}
+        {(() => {
+          const isP2Local = mpRole === 'p2';
+          const remotePlayer = isP2Local ? player : computer;
+          const isRemoteHuman = isP2Local ? p1Type === 'human' : p2Type === 'human';
+          const remoteName = isP2Local
+            ? 'Jogador 1 (Azul - Remoto)'
+            : p2Type === 'human'
+            ? 'Jogador 2 (Vermelho - Remoto)'
+            : 'Computador 2 (AI Bot)';
 
-            <div className="flex items-center gap-3">
-              {/* Coffee indicator */}
-              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-                <span className="text-sm">☕</span>
-                <span className="font-black text-cyan-300">{computer.coffee}/10</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Computer Hand (Face Down) & Battlefield */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
-            {/* Computer Hand (Face Down cards using verso_da_carta.png) */}
-            <div className="md:col-span-2 flex items-center justify-start gap-1.5 overflow-x-auto p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 min-h-[95px]">
-              <div className="flex flex-col items-center justify-center shrink-0 pr-1.5 border-r border-slate-800 mr-1 text-[10px] text-slate-400">
-                <span className="font-bold text-slate-300">MÃO AI</span>
-                <span className="font-black text-cyan-400">{computer.hand.length}/3</span>
-              </div>
-              {computer.hand.length === 0 ? (
-                <span className="text-xs text-slate-500 italic">Mão vazia</span>
-              ) : (
-                computer.hand.map((card, index) => (
-                  <div key={card.instanceId || index} className="w-16 sm:w-20 shrink-0 shadow-lg transition-transform hover:-translate-y-1">
-                    <CardBack />
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Computer Active Board Cards */}
-            <div className="md:col-span-4 min-h-[140px] bg-slate-950/40 p-2 rounded-xl border border-slate-800/50 flex items-center justify-center gap-2 flex-wrap">
-              {computer.board.length === 0 ? (
-                <div className="text-slate-600 text-xs italic flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-slate-600" />
-                  Nenhum funcionário do computador no campo de batalha
+          return (
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
+              <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{isRemoteHuman ? '👤' : '🤖'}</span>
+                  <strong className="text-purple-300 font-bold">{remoteName}</strong>
+                  <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{remotePlayer.firedCount}</strong></span>
                 </div>
-              ) : (
-                computer.board.map((card) => {
-                  const isValidTarget =
-                    selectedAttackerId !== null &&
-                    currentTurnOwner === 'player' &&
-                    isValidAttackTarget(card, computer.board);
 
-                  const isAffected = isCardAffectedByEvent(card, activeEvent, 'computer');
+                <div className="flex items-center gap-3">
+                  {/* Coffee indicator */}
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                    <span className="text-sm">☕</span>
+                    <span className="font-black text-cyan-300">{remotePlayer.coffee}/10</span>
+                  </div>
+                </div>
+              </div>
 
-                  return (
-                    <div key={card.instanceId} className="w-32 sm:w-40">
-                      <CardView
-                        card={card}
-                        isSelected={selectedBoardCardId === card.instanceId}
-                        isValidTarget={isValidTarget}
-                        isAttacking={attackingCardId === card.instanceId}
-                        attackDirection={attackDirection}
-                        isDefenderHit={hitCardId === card.instanceId}
-                        isAffectedByEvent={isAffected}
-                        eventName={activeEvent?.title}
-                        onClick={() => handleAttackEnemyCard(card)}
-                      />
+              {/* Remote Hand (Face Down) & Battlefield */}
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
+                {/* Remote Hand (Face Down cards using verso_da_carta.png) */}
+                <div className="md:col-span-2 flex items-center justify-start gap-1.5 overflow-x-auto p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 min-h-[95px]">
+                  <div className="flex flex-col items-center justify-center shrink-0 pr-1.5 border-r border-slate-800 mr-1 text-[10px] text-slate-400">
+                    <span className="font-bold text-slate-300">MÃO OPONENTE</span>
+                    <span className="font-black text-cyan-400">{remotePlayer.hand.length}/3</span>
+                  </div>
+                  {remotePlayer.hand.length === 0 ? (
+                    <span className="text-xs text-slate-500 italic">Mão vazia</span>
+                  ) : (
+                    remotePlayer.hand.map((card, index) => (
+                      <div key={card.instanceId || index} className="w-16 sm:w-20 shrink-0 shadow-lg transition-transform hover:-translate-y-1">
+                        <CardBack />
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Remote Active Board Cards */}
+                <div className="md:col-span-4 min-h-[140px] bg-slate-950/40 p-2 rounded-xl border border-slate-800/50 flex items-center justify-center gap-2 flex-wrap">
+                  {remotePlayer.board.length === 0 ? (
+                    <div className="text-slate-600 text-xs italic flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-slate-600" />
+                      Nenhum funcionário do oponente no campo de batalha
                     </div>
-                  );
-                })
-              )}
+                  ) : (
+                    remotePlayer.board.map((card) => {
+                      const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+                      const isValidTarget =
+                        selectedAttackerId !== null &&
+                        isMyTurn &&
+                        isValidAttackTarget(card, remotePlayer.board);
+
+                      const isAffected = isCardAffectedByEvent(card, activeEvent, isP2Local ? 'player' : 'computer');
+
+                      return (
+                        <div key={card.instanceId} className="w-32 sm:w-40">
+                          <CardView
+                            card={card}
+                            isSelected={selectedBoardCardId === card.instanceId}
+                            isValidTarget={isValidTarget}
+                            isAttacking={attackingCardId === card.instanceId}
+                            attackDirection={attackDirection}
+                            isDefenderHit={hitCardId === card.instanceId}
+                            isAffectedByEvent={isAffected}
+                            eventName={activeEvent?.title}
+                            onClick={() => handleAttackEnemyCard(card)}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* 3. CENTER ZONE: DECK STACK + TERMINAL CONSOLE + CONTROLS */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch min-h-[120px]">
@@ -1693,43 +1774,64 @@ export const GameBoard: React.FC = () => {
           </div>
 
           {/* Turn Action Button */}
-          <div className="md:col-span-2 bg-slate-900/80 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center justify-center gap-2">
-            <button
-              onClick={handleEndTurn}
-              disabled={currentTurnOwner !== 'player' || isAnimating}
-              className={`w-full py-3 px-3 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg ${
-                currentTurnOwner === 'player' && !isAnimating
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 active:scale-95'
-                  : 'bg-slate-800 text-slate-500 opacity-60 cursor-not-allowed'
-              }`}
-            >
-              <Play className="w-4 h-4 fill-current" />
-              {isAnimating ? 'Animando...' : 'Passar Turno'}
-            </button>
-            <span className="text-[10px] text-slate-400 text-center">
-              {isAnimating ? 'Aguarde as animações...' : currentTurnOwner === 'player' ? 'Clique para passar a vez' : 'Computador pensando...'}
-            </span>
-          </div>
+          {(() => {
+            const isP2Local = mpRole === 'p2';
+            const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+            const turnText = isAnimating
+              ? 'Animando...'
+              : isMyTurn
+              ? 'Passar Turno'
+              : 'Turno do Oponente...';
+
+            return (
+              <div className="md:col-span-2 bg-slate-900/80 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center justify-center gap-2">
+                <button
+                  onClick={handleEndTurn}
+                  disabled={!isMyTurn || isAnimating}
+                  className={`w-full py-3 px-3 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg ${
+                    isMyTurn && !isAnimating
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 active:scale-95'
+                      : 'bg-slate-800 text-slate-500 opacity-60 cursor-not-allowed'
+                  }`}
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  {turnText}
+                </button>
+                <span className="text-[10px] text-slate-400 text-center">
+                  {isAnimating
+                    ? 'Aguarde as animações...'
+                    : isMyTurn
+                    ? 'Clique para passar a vez'
+                    : 'Aguardando oponente...'}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 3.5 CARD SELECTION STATUS PANEL (HAND CARD WITH BUY BUTTON, OR BOARD CARD WITHOUT BUY BUTTON) */}
         {(() => {
-          const selectedHandCard = player.hand.find(c => c.instanceId === selectedHandCardId) || null;
+          const isP2Local = mpRole === 'p2';
+          const localPlayer = isP2Local ? computer : player;
+          const remotePlayer = isP2Local ? player : computer;
+          const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+
+          const selectedHandCard = localPlayer.hand.find(c => c.instanceId === selectedHandCardId) || null;
           const selectedBoardCard = selectedBoardCardId
-            ? (player.board.find(c => c.instanceId === selectedBoardCardId) || computer.board.find(c => c.instanceId === selectedBoardCardId) || null)
-            : (selectedAttackerId ? player.board.find(c => c.instanceId === selectedAttackerId) || null : null);
+            ? (localPlayer.board.find(c => c.instanceId === selectedBoardCardId) || remotePlayer.board.find(c => c.instanceId === selectedBoardCardId) || null)
+            : (selectedAttackerId ? localPlayer.board.find(c => c.instanceId === selectedAttackerId) || null : null);
 
           const cardToShow = selectedHandCard || selectedBoardCard;
           if (!cardToShow) return null;
 
           const isHandCard = selectedHandCard !== null;
-          const isPlayerCard = cardToShow.owner === 'player';
-          const cardOwnerLabel = isHandCard ? 'Na Mão' : isPlayerCard ? 'Sua Carta (Mesa)' : 'Inimigo (Computador)';
-          const actualCost = getActualCardCost(cardToShow, isPlayerCard ? player : computer);
+          const isLocalCard = cardToShow.owner === (isP2Local ? 'computer' : 'player');
+          const cardOwnerLabel = isHandCard ? 'Na Mão' : isLocalCard ? 'Sua Carta (Mesa)' : 'Inimigo (Oponente)';
+          const actualCost = getActualCardCost(cardToShow, isLocalCard ? localPlayer : remotePlayer);
 
           return (
             <div className={`bg-slate-900 border-2 ${
-              isHandCard ? 'border-cyan-400' : isPlayerCard ? 'border-emerald-400' : 'border-rose-400'
+              isHandCard ? 'border-cyan-400' : isLocalCard ? 'border-emerald-400' : 'border-rose-400'
             } p-3 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in`}>
               {/* STATUSBAR COM RESUMO DE ATRIBUTOS, MODIFICADORES E CONTRATO PJ */}
               <div className="flex-1 flex flex-col gap-1 text-xs text-left w-full">
@@ -1739,7 +1841,7 @@ export const GameBoard: React.FC = () => {
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                     isHandCard 
                       ? 'bg-cyan-950 text-cyan-300 border border-cyan-600/60' 
-                      : isPlayerCard 
+                      : isLocalCard 
                       ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/60' 
                       : 'bg-rose-950 text-rose-300 border border-rose-600/60'
                   }`}>
@@ -1843,10 +1945,9 @@ export const GameBoard: React.FC = () => {
 
               {/* BOTÃO COMPRAR - APENAS SE FOR CARTA DA MÃO */}
               {isHandCard && (() => {
-                const canAfford = player.coffee >= actualCost;
-                const isMyTurn = currentTurnOwner === 'player';
-                const handIndex = player.hand.findIndex(c => c.instanceId === cardToShow.instanceId);
-                const canBuy = canAfford && isMyTurn && !isAnimating && handIndex !== -1 && player.board.length < 5;
+                const canAfford = localPlayer.coffee >= actualCost;
+                const handIndex = localPlayer.hand.findIndex(c => c.instanceId === cardToShow.instanceId);
+                const canBuy = canAfford && isMyTurn && !isAnimating && handIndex !== -1 && localPlayer.board.length < 5;
 
                 return (
                   <button
@@ -1868,24 +1969,23 @@ export const GameBoard: React.FC = () => {
                     {canBuy
                       ? `Comprar / Contratar (-${actualCost} ☕)`
                       : !canAfford
-                      ? `Café Insuficiente (${player.coffee}/${actualCost} ☕)`
+                      ? `Café Insuficiente (${localPlayer.coffee}/${actualCost} ☕)`
                       : !isMyTurn
                       ? 'Aguarde seu Turno'
-                      : player.board.length >= 5
+                      : localPlayer.board.length >= 5
                       ? 'Mesa Cheia (Máx 5)'
                       : 'Indisponível'}
                   </button>
                 );
               })()}
 
-              {/* BOTÕES DE AÇÃO - SE FOR CARTA CONTRATADA NA MESA DO JOGADOR */}
-              {!isHandCard && isPlayerCard && (() => {
-                const isMyTurn = currentTurnOwner === 'player';
+              {/* BOTÕES DE AÇÃO - SE FOR CARTA CONTRATADA NA MESA DO JOGADOR LOCAL */}
+              {!isHandCard && isLocalCard && (() => {
                 const refundCoffee = cardToShow.cost > 1 ? (cardToShow.cost - 1) : 0;
                 const canResign = isMyTurn && !isAnimating;
 
                 const isRH = (cardToShow.role || '').toUpperCase().includes('RH') || cardToShow.templateId === 'thais_tudano';
-                const canInvis = isMyTurn && !isAnimating && isRH && !cardToShow.isInvisible && player.coffee >= 1;
+                const canInvis = isMyTurn && !isAnimating && isRH && !cardToShow.isInvisible && localPlayer.coffee >= 1;
 
                 return (
                   <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
@@ -1902,7 +2002,7 @@ export const GameBoard: React.FC = () => {
                         title={
                           cardToShow.isInvisible
                             ? 'Carta já está invisível neste turno'
-                            : player.coffee < 1
+                            : localPlayer.coffee < 1
                             ? 'Café insuficiente (Requer 1 ☕)'
                             : 'Ficar invisível por 1 turno (Requer 1 ☕)'
                         }
@@ -1932,115 +2032,129 @@ export const GameBoard: React.FC = () => {
           );
         })()}
 
-        {/* 4. PLAYER ZONE (BOTTOM) */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
-          {/* Player Active Board Cards */}
-          <div className="min-h-[140px] bg-slate-950/40 p-2 rounded-xl border border-slate-800/50 flex items-center justify-center gap-2 flex-wrap">
-            {player.board.length === 0 ? (
-              <div className="text-slate-500 text-xs italic flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-slate-500" />
-                Seu campo está vazio! Selecione e compre cartas da sua mão para defender sua equipe.
-              </div>
-            ) : (
-              player.board.map((card) => {
-                const isSelected = selectedAttackerId === card.instanceId || selectedBoardCardId === card.instanceId;
-                const isAffected = isCardAffectedByEvent(card, activeEvent, 'player');
-                return (
-                  <div key={card.instanceId} className="w-32 sm:w-40">
-                    <CardView
-                      card={card}
-                      isSelected={isSelected}
-                      isAttacking={attackingCardId === card.instanceId}
-                      attackDirection={attackDirection}
-                      isDefenderHit={hitCardId === card.instanceId}
-                      isAffectedByEvent={isAffected}
-                      eventName={activeEvent?.title}
-                      onClick={() => handleSelectPlayerBoardCard(card)}
-                    />
+        {/* 4. PLAYER ZONE (BOTTOM) - ALWAYS SHOWS LOCAL PLAYER */}
+        {(() => {
+          const isP2Local = mpRole === 'p2';
+          const localPlayer = isP2Local ? computer : player;
+          const isLocalHuman = isP2Local ? p2Type === 'human' : p1Type === 'human';
+          const localName = isP2Local
+            ? 'Sua Mão (Jogador 2 Vermelho)'
+            : p1Type === 'human'
+            ? 'Sua Mão (Jogador 1 Azul)'
+            : 'Mão P1 (Computador 1 Azul)';
+          const isMyTurn = isP2Local ? currentTurnOwner === 'computer' : currentTurnOwner === 'player';
+
+          return (
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl space-y-2">
+              {/* Local Player Active Board Cards */}
+              <div className="min-h-[140px] bg-slate-950/40 p-2 rounded-xl border border-slate-800/50 flex items-center justify-center gap-2 flex-wrap">
+                {localPlayer.board.length === 0 ? (
+                  <div className="text-slate-500 text-xs italic flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-slate-500" />
+                    Seu campo está vazio! Selecione e compre cartas da sua mão para defender sua equipe.
                   </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Player Controls Bar & Hand */}
-          <div className="border-t border-slate-800 pt-2 space-y-2">
-            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-base">{p1Type === 'human' ? '👤' : '🤖'}</span>
-                <strong className="text-emerald-300 font-bold">{p1Type === 'human' ? 'Sua Mão (Jogador 1 Azul)' : 'Mão P1 (Computador 1 Azul)'}</strong>
-                <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{player.firedCount}</strong></span>
+                ) : (
+                  localPlayer.board.map((card) => {
+                    const isSelected = selectedAttackerId === card.instanceId || selectedBoardCardId === card.instanceId;
+                    const isAffected = isCardAffectedByEvent(card, activeEvent, isP2Local ? 'computer' : 'player');
+                    return (
+                      <div key={card.instanceId} className="w-32 sm:w-40">
+                        <CardView
+                          card={card}
+                          isSelected={isSelected}
+                          isAttacking={attackingCardId === card.instanceId}
+                          attackDirection={attackDirection}
+                          isDefenderHit={hitCardId === card.instanceId}
+                          isAffectedByEvent={isAffected}
+                          eventName={activeEvent?.title}
+                          onClick={() => handleSelectLocalBoardCard(card)}
+                        />
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Triagem Button */}
-                {(() => {
-                  const playerRhCount = player.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
-                  const maxFreeTriages = 2 + playerRhCount;
-                  const isFree = triageCount < maxFreeTriages;
-                  const canAfford = isFree || player.coffee >= 1;
-                  const disabled = currentTurnOwner !== 'player' || isAnimating || !canAfford;
+              {/* Local Player Controls Bar & Hand */}
+              <div className="border-t border-slate-800 pt-2 space-y-2">
+                <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{isLocalHuman ? '👤' : '🤖'}</span>
+                    <strong className="text-emerald-300 font-bold">{localName}</strong>
+                    <span className="text-slate-400 text-[11px]">| Demitidos: <strong className="text-rose-400">{localPlayer.firedCount}</strong></span>
+                  </div>
 
-                  return (
-                    <button
-                      onClick={handleTriage}
-                      disabled={disabled}
-                      className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold px-3 py-1 rounded-lg border border-emerald-400/40 shadow-sm transition-all cursor-pointer"
-                      title={isFree
-                        ? `Substituir cartas da mão (Grátis na rodada - uso ${triageCount + 1}/${maxFreeTriages}${playerRhCount > 0 ? ` [${playerRhCount} RH em jogo]` : ''})`
-                        : `Substituir cartas da mão (Custa 1 Café a partir da ${maxFreeTriages + 1}ª vez na rodada)`}
-                    >
-                      <UserPlus className="w-3.5 h-3.5 text-emerald-200" />
-                      <span>Triagem {isFree ? '(Grátis)' : '(-1 ☕)'}</span>
-                    </button>
-                  );
-                })()}
+                  <div className="flex items-center gap-2">
+                    {/* Triagem Button */}
+                    {(() => {
+                      const localRhCount = localPlayer.board.filter(c => (c.role || '').toUpperCase().includes('RH')).length;
+                      const maxFreeTriages = 2 + localRhCount;
+                      const isFree = triageCount < maxFreeTriages;
+                      const canAfford = isFree || localPlayer.coffee >= 1;
+                      const disabled = !isMyTurn || isAnimating || !canAfford;
 
-                {/* Player Coffee Meter */}
-                <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-inner">
-                  <Coffee className={`w-4 h-4 text-cyan-400 ${player.coffee === 0 ? 'animate-bounce text-red-400' : ''}`} />
-                  <span className="font-black text-cyan-300 text-sm">
-                    {player.coffee} / 10 Café
-                  </span>
+                      return (
+                        <button
+                          onClick={handleTriage}
+                          disabled={disabled}
+                          className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-bold px-3 py-1 rounded-lg border border-emerald-400/40 shadow-sm transition-all cursor-pointer"
+                          title={isFree
+                            ? `Substituir cartas da mão (Grátis na rodada - uso ${triageCount + 1}/${maxFreeTriages}${localRhCount > 0 ? ` [${localRhCount} RH em jogo]` : ''})`
+                            : `Substituir cartas da mão (Custa 1 Café a partir da ${maxFreeTriages + 1}ª vez na rodada)`}
+                        >
+                          <UserPlus className="w-3.5 h-3.5 text-emerald-200" />
+                          <span>Triagem {isFree ? '(Grátis)' : '(-1 ☕)'}</span>
+                        </button>
+                      );
+                    })()}
+
+                    {/* Local Player Coffee Meter */}
+                    <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-inner">
+                      <Coffee className={`w-4 h-4 text-cyan-400 ${localPlayer.coffee === 0 ? 'animate-bounce text-red-400' : ''}`} />
+                      <span className="font-black text-cyan-300 text-sm">
+                        {localPlayer.coffee} / 10 Café
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Local Player Hand Cards */}
+                <div className="flex items-center justify-center gap-2 flex-wrap min-h-[120px] bg-slate-950/60 p-2 rounded-xl border border-slate-800/80">
+                  {localPlayer.hand.length === 0 ? (
+                    <span className="text-slate-600 text-xs italic">Sua mão está vazia!</span>
+                  ) : (
+                    localPlayer.hand.map((card) => {
+                      const actualCost = getActualCardCost(card, localPlayer);
+                      const canAfford = localPlayer.coffee >= actualCost;
+                      const isAffected = isCardAffectedByEvent(card, activeEvent, isP2Local ? 'computer' : 'player');
+                      const isSelectedHand = selectedHandCardId === card.instanceId;
+
+                      return (
+                        <div
+                          key={card.instanceId}
+                          className={`w-28 sm:w-36 transition-transform ${
+                            isSelectedHand
+                              ? 'scale-105 -translate-y-2'
+                              : canAfford ? 'hover:-translate-y-1 cursor-pointer' : 'opacity-60 grayscale'
+                          }`}
+                        >
+                          <CardView
+                            card={card}
+                            actualCost={actualCost}
+                            isSelected={isSelectedHand}
+                            isAffectedByEvent={isAffected}
+                            eventName={activeEvent?.title}
+                            onClick={() => setSelectedHandCardId(prev => prev === card.instanceId ? null : card.instanceId)}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
-
-            {/* Player Hand Cards */}
-            <div className="flex items-center justify-center gap-2 flex-wrap min-h-[120px] bg-slate-950/60 p-2 rounded-xl border border-slate-800/80">
-              {player.hand.length === 0 ? (
-                <span className="text-slate-600 text-xs italic">Sua mão está vazia!</span>
-              ) : (
-                player.hand.map((card) => {
-                  const actualCost = getActualCardCost(card, player);
-                  const canAfford = player.coffee >= actualCost;
-                  const isAffected = isCardAffectedByEvent(card, activeEvent, 'player');
-                  const isSelectedHand = selectedHandCardId === card.instanceId;
-
-                  return (
-                    <div
-                      key={card.instanceId}
-                      className={`w-28 sm:w-36 transition-transform ${
-                        isSelectedHand
-                          ? 'scale-105 -translate-y-2'
-                          : canAfford ? 'hover:-translate-y-1 cursor-pointer' : 'opacity-60 grayscale'
-                      }`}
-                    >
-                      <CardView
-                        card={card}
-                        actualCost={actualCost}
-                        isSelected={isSelectedHand}
-                        isAffectedByEvent={isAffected}
-                        eventName={activeEvent?.title}
-                        onClick={() => setSelectedHandCardId(prev => prev === card.instanceId ? null : card.instanceId)}
-                      />
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
+          );
+        })()}
       </main>
 
       {/* MODALS */}

@@ -50,7 +50,7 @@ async function startServer() {
 
   // API Health check
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', version: '1.2026.08.04', activeRooms: rooms.size });
+    res.json({ status: 'ok', version: '1.2026.08.05', activeRooms: rooms.size });
   });
 
   // WebSocket connection handler
@@ -286,7 +286,7 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`TI Battleground Server running on http://0.0.0.0:${PORT} [v1.2026.08.04]`);
+    console.log(`TI Battleground Server running on http://0.0.0.0:${PORT} [v1.2026.08.05]`);
   });
 }
 
