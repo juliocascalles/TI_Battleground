@@ -68,7 +68,7 @@ export const GameBoard: React.FC = () => {
     extraCoffeeCostRounds: 0,
   });
 
-  // Refs to avoid stale state issues in async animations
+  // Refs to avoid stale state issues in async animations and WebSocket sync
   const playerRef = useRef(player);
   playerRef.current = player;
   const computerRef = useRef(computer);
@@ -77,6 +77,15 @@ export const GameBoard: React.FC = () => {
   deckRef.current = deck;
 
   const [currentTurnOwner, setCurrentTurnOwner] = useState<'player' | 'computer'>('player');
+  const currentTurnOwnerRef = useRef(currentTurnOwner);
+  currentTurnOwnerRef.current = currentTurnOwner;
+
+  const mpRoleRef = useRef(mpRole);
+  mpRoleRef.current = mpRole;
+  const p1TypeRef = useRef(p1Type);
+  p1TypeRef.current = p1Type;
+  const p2TypeRef = useRef(p2Type);
+  p2TypeRef.current = p2Type;
   const [turnNumber, setTurnNumber] = useState<number>(1);
   const [turnsSinceLastEvent, setTurnsSinceLastEvent] = useState<number>(0);
 
@@ -777,6 +786,67 @@ export const GameBoard: React.FC = () => {
 
     const nextTurnOwner = isP2Local ? 'player' : 'computer';
     const nextPlayerLabel = isP2Local ? 'Jogador 1 (Azul)' : (p2Type === 'human' ? 'Jogador 2 (Vermelho)' : 'Computador 2');
+    
+    if (isP2Local) {
+      setTurnNumber(prev => prev + 1);
+    }
+
+    // In local hotseat mode (not connected to remote multiplayer), process turn start for the next human player directly
+    if (!mpConnected && p1Type === 'human' && p2Type === 'human') {
+      soundFx.coffeeSound();
+      if (nextTurnOwner === 'player') {
+        const pLucro = updatedP.board.filter(c => c.modifiers.includes('lucro')).length;
+        const nextCoffee = Math.min(10, updatedP.coffee + 2 + pLucro);
+        let drawBlocked = Math.max(0, updatedP.drawBlockedRounds - 1);
+        let newHand = [...updatedP.hand];
+
+        if (drawBlocked === 0) {
+          const needed = 3 - newHand.length;
+          if (needed > 0 && currentDeck.length > 0) {
+            const drawn = currentDeck.splice(0, needed).map(c => ({ ...c, owner: 'player' as const }));
+            newHand = [...newHand, ...drawn];
+            setDeck(currentDeck);
+          }
+        }
+        updatedP = {
+          ...updatedP,
+          coffee: nextCoffee,
+          hand: newHand,
+          canAttackThisTurn: true,
+          canPlayCardsThisTurn: true,
+          drawBlockedRounds: drawBlocked,
+          extraCoffeeCostRounds: Math.max(0, updatedP.extraCoffeeCostRounds - 1),
+          board: processBoardCardsTurn(updatedP.board, 'Jogador 1 (Azul)'),
+        };
+      } else {
+        const cLucro = updatedC.board.filter(c => c.modifiers.includes('lucro')).length;
+        const nextCoffee = Math.min(10, updatedC.coffee + 2 + cLucro);
+        let drawBlocked = Math.max(0, updatedC.drawBlockedRounds - 1);
+        let newHand = [...updatedC.hand];
+
+        if (drawBlocked === 0) {
+          const needed = 3 - newHand.length;
+          if (needed > 0 && currentDeck.length > 0) {
+            const drawn = currentDeck.splice(0, needed).map(c => ({ ...c, owner: 'computer' as const }));
+            newHand = [...newHand, ...drawn];
+            setDeck(currentDeck);
+          }
+        }
+        updatedC = {
+          ...updatedC,
+          coffee: nextCoffee,
+          hand: newHand,
+          canAttackThisTurn: true,
+          canPlayCardsThisTurn: true,
+          drawBlockedRounds: drawBlocked,
+          extraCoffeeCostRounds: Math.max(0, updatedC.extraCoffeeCostRounds - 1),
+          board: processBoardCardsTurn(updatedC.board, 'Jogador 2 (Vermelho)'),
+        };
+      }
+    }
+
+    setPlayer(updatedP);
+    setComputer(updatedC);
     setCurrentTurnOwner(nextTurnOwner);
     setTriageCount(0);
     setLogs(prev => [...prev, `👉 Turno passado para ${nextPlayerLabel}!`]);
@@ -1238,15 +1308,115 @@ export const GameBoard: React.FC = () => {
         onStateReceived: (receivedState, log) => {
           if (receivedState) {
             isSyncingFromWsRef.current = true;
-            if (receivedState.player) setPlayer(receivedState.player);
-            if (receivedState.computer) setComputer(receivedState.computer);
-            if (receivedState.deck) setDeck(receivedState.deck);
-            if (receivedState.currentTurnOwner) setCurrentTurnOwner(receivedState.currentTurnOwner);
-            if (receivedState.turnNumber) setTurnNumber(receivedState.turnNumber);
-            if (receivedState.activeEvent !== undefined) setActiveEvent(receivedState.activeEvent);
+
+            const prevOwner = currentTurnOwnerRef.current;
+            const newOwner = receivedState.currentTurnOwner || prevOwner;
+            const myRole = mpRoleRef.current;
+            const myOwnerKey = myRole === 'p2' ? 'computer' : 'player';
+
+            let finalPlayer = receivedState.player ? { ...receivedState.player } : { ...playerRef.current };
+            let finalComputer = receivedState.computer ? { ...receivedState.computer } : { ...computerRef.current };
+            let finalDeck = receivedState.deck ? [...receivedState.deck] : [...deckRef.current];
+            let finalTurnOwner = newOwner;
+            let finalTurnNumber = receivedState.turnNumber || 1;
+            let finalActiveEvent = receivedState.activeEvent !== undefined ? receivedState.activeEvent : null;
+
+            const isMultiplayerGame = p1TypeRef.current === 'human' && p2TypeRef.current === 'human';
+            const isTurnPassedToMe = isMultiplayerGame && prevOwner !== newOwner && newOwner === myOwnerKey;
+
+            if (isTurnPassedToMe) {
+              soundFx.coffeeSound();
+
+              if (myOwnerKey === 'player') {
+                // I am Player 1 (Azul) receiving turn pass from Player 2
+                const pLucro = finalPlayer.board.filter(c => c.modifiers.includes('lucro')).length;
+                const nextCoffee = Math.min(10, finalPlayer.coffee + 2 + pLucro);
+                let drawBlocked = Math.max(0, finalPlayer.drawBlockedRounds - 1);
+                let newHand = [...finalPlayer.hand];
+                let curDeck = [...finalDeck];
+
+                if (drawBlocked === 0) {
+                  const needed = 3 - newHand.length;
+                  if (needed > 0 && curDeck.length > 0) {
+                    const drawnCards = curDeck.splice(0, needed).map(c => ({ ...c, owner: 'player' as const }));
+                    newHand = [...newHand, ...drawnCards];
+                    finalDeck = curDeck;
+                    const cardText = drawnCards.length === 3 ? 'Três novas cartas foram colocadas na sua mão!' : `${drawnCards.length} nova(s) carta(s) foram colocadas na sua mão!`;
+                    setLogs(prev => [...prev, `📥 ${cardText} (Mão: ${newHand.length}/3)`]);
+                  }
+                } else {
+                  setLogs(prev => [...prev, '🚫 Suas compras estão bloqueadas por licença maternidade!']);
+                }
+
+                const profitMsg = pLucro > 0 ? ` (+${pLucro} 💰 Lucro)` : '';
+                setLogs(prev => [...prev, `👉 SEU TURNO (Jogador 1 Azul)! Ganhou +2 Café${profitMsg}. Cartas inativas reativadas na mesa.`]);
+
+                finalPlayer = {
+                  ...finalPlayer,
+                  coffee: nextCoffee,
+                  hand: newHand,
+                  canAttackThisTurn: true,
+                  canPlayCardsThisTurn: true,
+                  drawBlockedRounds: drawBlocked,
+                  extraCoffeeCostRounds: Math.max(0, finalPlayer.extraCoffeeCostRounds - 1),
+                  board: processBoardCardsTurn(finalPlayer.board, 'Jogador 1 (Azul)'),
+                };
+              } else {
+                // I am Player 2 (Vermelho) receiving turn pass from Player 1
+                const cLucro = finalComputer.board.filter(c => c.modifiers.includes('lucro')).length;
+                const nextCoffee = Math.min(10, finalComputer.coffee + 2 + cLucro);
+                let drawBlocked = Math.max(0, finalComputer.drawBlockedRounds - 1);
+                let newHand = [...finalComputer.hand];
+                let curDeck = [...finalDeck];
+
+                if (drawBlocked === 0) {
+                  const needed = 3 - newHand.length;
+                  if (needed > 0 && curDeck.length > 0) {
+                    const drawnCards = curDeck.splice(0, needed).map(c => ({ ...c, owner: 'computer' as const }));
+                    newHand = [...newHand, ...drawnCards];
+                    finalDeck = curDeck;
+                    const cardText = drawnCards.length === 3 ? 'Três novas cartas foram colocadas na sua mão!' : `${drawnCards.length} nova(s) carta(s) foram colocadas na sua mão!`;
+                    setLogs(prev => [...prev, `📥 ${cardText} (Mão: ${newHand.length}/3)`]);
+                  }
+                } else {
+                  setLogs(prev => [...prev, '🚫 Suas compras estão bloqueadas por licença maternidade!']);
+                }
+
+                const profitMsg = cLucro > 0 ? ` (+${cLucro} 💰 Lucro)` : '';
+                setLogs(prev => [...prev, `👉 SEU TURNO (Jogador 2 Vermelho)! Ganhou +2 Café${profitMsg}. Cartas inativas reativadas na mesa.`]);
+
+                finalComputer = {
+                  ...finalComputer,
+                  coffee: nextCoffee,
+                  hand: newHand,
+                  canAttackThisTurn: true,
+                  canPlayCardsThisTurn: true,
+                  drawBlockedRounds: drawBlocked,
+                  extraCoffeeCostRounds: Math.max(0, finalComputer.extraCoffeeCostRounds - 1),
+                  board: processBoardCardsTurn(finalComputer.board, 'Jogador 2 (Vermelho)'),
+                };
+              }
+            }
+
+            setPlayer(finalPlayer);
+            setComputer(finalComputer);
+            setDeck(finalDeck);
+            setCurrentTurnOwner(finalTurnOwner);
+            setTurnNumber(finalTurnNumber);
+            if (finalActiveEvent !== undefined) setActiveEvent(finalActiveEvent);
 
             setTimeout(() => {
               isSyncingFromWsRef.current = false;
+              if (isTurnPassedToMe && mpClientRef.current) {
+                mpClientRef.current.syncState({
+                  player: finalPlayer,
+                  computer: finalComputer,
+                  deck: finalDeck,
+                  currentTurnOwner: finalTurnOwner,
+                  turnNumber: finalTurnNumber,
+                  activeEvent: finalActiveEvent,
+                });
+              }
             }, 100);
           }
           if (log) {
