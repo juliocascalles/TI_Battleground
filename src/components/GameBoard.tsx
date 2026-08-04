@@ -12,7 +12,7 @@ import { TerminalConsole } from './TerminalConsole';
 import { RulesModal } from './RulesModal';
 import { GameOverModal } from './GameOverModal';
 
-import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp, Ghost, User, Bot, Globe, Pause, FastForward, StepForward, Copy, Check, Users, RefreshCw } from 'lucide-react';
+import { Coffee, Volume2, VolumeX, HelpCircle, RotateCcw, Swords, Play, ShieldAlert, ShoppingCart, Shield, Zap, Target, Lock, UserX, Clock, UserPlus, TrendingUp, Ghost, User, Bot, Globe, Pause, FastForward, StepForward, Copy, Check, Users, RefreshCw, Sparkles } from 'lucide-react';
 
 export const GameBoard: React.FC = () => {
   // --- PLAYER CONTROLLERS & GAME MODES ---
@@ -1152,9 +1152,26 @@ export const GameBoard: React.FC = () => {
     setIsMuted(muted);
   };
 
+  // Ref to prevent echo loops when updating state from WebSocket
+  const isSyncingFromWsRef = useRef<boolean>(false);
+
+  // Auto detect room code from URL parameter on load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromQuery = urlParams.get('room') || window.location.hash.replace('#', '');
+    if (roomFromQuery) {
+      const cleanRoom = roomFromQuery.trim().toUpperCase();
+      if (cleanRoom) {
+        setMpRoomId(cleanRoom);
+        setP1Type('human');
+        setP2Type('human');
+      }
+    }
+  }, []);
+
   // --- WEBSOCKET MULTIPLAYER CONNECTION & SYNC ---
   const connectMultiplayer = (roomIdToJoin?: string) => {
-    const targetRoom = (roomIdToJoin || mpRoomId || 'SALA1').toUpperCase();
+    const targetRoom = (roomIdToJoin || mpRoomId || 'SALA1').toUpperCase().trim();
     setMpRoomId(targetRoom);
 
     if (mpClientRef.current) {
@@ -1167,12 +1184,17 @@ export const GameBoard: React.FC = () => {
     client.connect(targetRoom, {
       onStateReceived: (receivedState, log) => {
         if (receivedState) {
+          isSyncingFromWsRef.current = true;
           if (receivedState.player) setPlayer(receivedState.player);
           if (receivedState.computer) setComputer(receivedState.computer);
           if (receivedState.deck) setDeck(receivedState.deck);
           if (receivedState.currentTurnOwner) setCurrentTurnOwner(receivedState.currentTurnOwner);
           if (receivedState.turnNumber) setTurnNumber(receivedState.turnNumber);
           if (receivedState.activeEvent !== undefined) setActiveEvent(receivedState.activeEvent);
+
+          setTimeout(() => {
+            isSyncingFromWsRef.current = false;
+          }, 100);
         }
         if (log) {
           setLogs(prev => [...prev, log]);
@@ -1189,6 +1211,24 @@ export const GameBoard: React.FC = () => {
     });
   };
 
+  const generateRandomRoomId = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setMpRoomId(code);
+    connectMultiplayer(code);
+  };
+
+  const copyRoomInviteLink = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', mpRoomId);
+    navigator.clipboard.writeText(url.toString());
+    setMpCopied(true);
+    setTimeout(() => setMpCopied(false), 2500);
+  };
+
   useEffect(() => {
     if (p1Type === 'human' && p2Type === 'human') {
       connectMultiplayer(mpRoomId);
@@ -1202,11 +1242,12 @@ export const GameBoard: React.FC = () => {
   }, [p1Type, p2Type]);
 
   const syncMultiplayerState = (customState?: any, log?: string) => {
+    if (isSyncingFromWsRef.current) return;
     if (p1Type === 'human' && p2Type === 'human' && mpClientRef.current) {
       const stateToSync = customState || {
         player: playerRef.current,
         computer: computerRef.current,
-        deck,
+        deck: deckRef.current,
         currentTurnOwner,
         turnNumber,
         activeEvent,
@@ -1424,54 +1465,78 @@ export const GameBoard: React.FC = () => {
 
         {/* MULTIPLAYER WEBSOCKET BAR (Human vs Human) */}
         {p1Type === 'human' && p2Type === 'human' && (
-          <div className="bg-cyan-950/90 border border-cyan-500/50 rounded-xl p-2 flex flex-wrap items-center justify-between gap-2 text-xs shadow-xl animate-fade-in">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <strong className="text-cyan-200">Multiplayer Online via WebSocket:</strong>
-              <div className="flex items-center gap-1">
+          <div className="bg-gradient-to-r from-cyan-950 via-slate-900 to-cyan-950 border border-cyan-500/50 rounded-xl p-2.5 flex flex-col gap-2 text-xs shadow-xl animate-fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+                <strong className="text-cyan-200 text-xs sm:text-sm">Multiplayer Online via Código da Sala:</strong>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border flex items-center gap-1 ${
+                  mpConnected ? 'bg-emerald-950 text-emerald-300 border-emerald-500' : 'bg-rose-950 text-rose-300 border-rose-500'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${mpConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  {mpConnected ? `Conectado na Sala ${mpRoomId}` : 'Desconectado'}
+                  {mpRole && <span className="ml-1 text-cyan-300">({mpRole === 'p1' ? 'P1 Azul' : 'P2 Vermelho'})</span>}
+                </span>
+
+                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border flex items-center gap-1 ${
+                  mpP2Connected ? 'bg-cyan-950 text-cyan-300 border-cyan-500' : 'bg-amber-950 text-amber-300 border-amber-500'
+                }`}>
+                  <Users className="w-3 h-3" />
+                  {mpP2Connected ? '👥 Jogador 2 Conectado!' : '⏳ Aguardando Jogador 2...'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 p-2 rounded-lg border border-cyan-500/30">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                <span className="text-slate-300 font-bold text-xs whitespace-nowrap">Código da Sala:</span>
                 <input
                   type="text"
                   value={mpRoomId}
                   onChange={e => setMpRoomId(e.target.value.toUpperCase())}
-                  className="bg-slate-900 border border-cyan-500/40 rounded px-2 py-0.5 text-cyan-300 font-mono text-xs w-24 text-center font-bold uppercase"
-                  placeholder="SALA1"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      connectMultiplayer(mpRoomId);
+                    }
+                  }}
+                  className="bg-slate-900 border-2 border-cyan-500/60 focus:border-cyan-400 focus:outline-none rounded-lg px-3 py-1 text-cyan-200 font-mono text-sm font-black tracking-widest text-center uppercase w-32 shadow-inner"
+                  placeholder="EX: SALA1"
                 />
                 <button
                   onClick={() => connectMultiplayer(mpRoomId)}
-                  className="px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all cursor-pointer flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow"
+                  title="Conectar ou trocar para este código de sala"
                 >
-                  <RefreshCw className="w-3 h-3" /> Conectar
+                  <RefreshCw className="w-3.5 h-3.5" /> Entrar na Sala
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={generateRandomRoomId}
+                  className="px-2.5 py-1.5 rounded-lg bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-500/40 flex items-center gap-1 font-bold text-[11px] transition-all cursor-pointer"
+                  title="Gerar código aleatório de 6 caracteres"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-300" /> Gerar Código
+                </button>
+
+                <button
+                  onClick={copyRoomInviteLink}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5 font-bold transition-all cursor-pointer shadow"
+                  title="Copiar link com código da sala para enviar ao seu oponente"
+                >
+                  {mpCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {mpCopied ? 'Link Copiado!' : 'Copiar Link da Sala'}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  setMpCopied(true);
-                  setTimeout(() => setMpCopied(false), 2000);
-                }}
-                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition-all cursor-pointer"
-              >
-                {mpCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                {mpCopied ? 'Link Copiado!' : 'Copiar Link / Sala'}
-              </button>
-
-              <div className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border ${
-                  mpConnected ? 'bg-emerald-950 text-emerald-300 border-emerald-500' : 'bg-rose-950 text-rose-300 border-rose-500'
-                }`}>
-                  {mpConnected ? `🟢 Conectado (${mpRole === 'p1' ? 'P1 Azul' : 'P2 Vermelho'})` : '🔴 Desconectado'}
-                </span>
-
-                <span className={`px-2 py-0.5 rounded font-bold text-[11px] border ${
-                  mpP2Connected ? 'bg-cyan-950 text-cyan-300 border-cyan-500' : 'bg-amber-950 text-amber-300 border-amber-500'
-                }`}>
-                  {mpP2Connected ? '👥 P2 On' : '⏳ Aguardando P2...'}
-                </span>
-              </div>
-            </div>
+            <p className="text-[11px] text-cyan-300/80 font-medium italic">
+              💡 <strong>Dica:</strong> Dois jogadores que digitem o mesmo código (ex: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-200 font-mono font-bold">{mpRoomId}</code>) jogam a mesma partida em tempo real!
+            </p>
           </div>
         )}
       </header>
