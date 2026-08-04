@@ -1181,34 +1181,45 @@ export const GameBoard: React.FC = () => {
     const client = new MultiplayerClient();
     mpClientRef.current = client;
 
-    client.connect(targetRoom, {
-      onStateReceived: (receivedState, log) => {
-        if (receivedState) {
-          isSyncingFromWsRef.current = true;
-          if (receivedState.player) setPlayer(receivedState.player);
-          if (receivedState.computer) setComputer(receivedState.computer);
-          if (receivedState.deck) setDeck(receivedState.deck);
-          if (receivedState.currentTurnOwner) setCurrentTurnOwner(receivedState.currentTurnOwner);
-          if (receivedState.turnNumber) setTurnNumber(receivedState.turnNumber);
-          if (receivedState.activeEvent !== undefined) setActiveEvent(receivedState.activeEvent);
+    client.connect(
+      targetRoom,
+      {
+        onStateReceived: (receivedState, log) => {
+          if (receivedState) {
+            isSyncingFromWsRef.current = true;
+            if (receivedState.player) setPlayer(receivedState.player);
+            if (receivedState.computer) setComputer(receivedState.computer);
+            if (receivedState.deck) setDeck(receivedState.deck);
+            if (receivedState.currentTurnOwner) setCurrentTurnOwner(receivedState.currentTurnOwner);
+            if (receivedState.turnNumber) setTurnNumber(receivedState.turnNumber);
+            if (receivedState.activeEvent !== undefined) setActiveEvent(receivedState.activeEvent);
 
-          setTimeout(() => {
-            isSyncingFromWsRef.current = false;
-          }, 100);
-        }
-        if (log) {
+            setTimeout(() => {
+              isSyncingFromWsRef.current = false;
+            }, 100);
+          }
+          if (log) {
+            setLogs(prev => [...prev, log]);
+          }
+        },
+        onLogReceived: (log) => {
           setLogs(prev => [...prev, log]);
-        }
+        },
+        onStatusChange: (status) => {
+          setMpConnected(status.connected);
+          setMpRole(status.role);
+          setMpP2Connected(status.p2Connected);
+        },
       },
-      onLogReceived: (log) => {
-        setLogs(prev => [...prev, log]);
-      },
-      onStatusChange: (status) => {
-        setMpConnected(status.connected);
-        setMpRole(status.role);
-        setMpP2Connected(status.p2Connected);
-      },
-    });
+      () => ({
+        player: playerRef.current,
+        computer: computerRef.current,
+        deck: deckRef.current,
+        currentTurnOwner,
+        turnNumber,
+        activeEvent,
+      })
+    );
   };
 
   const generateRandomRoomId = () => {
@@ -1255,6 +1266,12 @@ export const GameBoard: React.FC = () => {
       mpClientRef.current.sendStateUpdate(stateToSync, log);
     }
   };
+
+  useEffect(() => {
+    if (p1Type === 'human' && p2Type === 'human' && mpConnected && !isSyncingFromWsRef.current) {
+      syncMultiplayerState();
+    }
+  }, [player, computer, deck, currentTurnOwner, turnNumber, activeEvent, mpConnected]);
 
   // --- AUTOMATED DEMO SIMULATION (Both Computer or AI Bot Turns) ---
   const runAiStep = async () => {

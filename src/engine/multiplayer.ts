@@ -13,6 +13,9 @@ export class MultiplayerClient {
   private onStateReceived?: (state: any, log?: string) => void;
   private onLogReceived?: (log: string) => void;
   private onStatusChange?: (status: { connected: boolean; roomId: string; role: 'p1' | 'p2' | null; p2Connected: boolean }) => void;
+  private isIntentionalDisconnect: boolean = false;
+  private reconnectTimeout: any = null;
+  private getInitialState?: () => any;
   private isP2Connected: boolean = false;
 
   constructor() {}
@@ -23,23 +26,33 @@ export class MultiplayerClient {
       onStateReceived: (state: any, log?: string) => void;
       onLogReceived: (log: string) => void;
       onStatusChange: (status: { connected: boolean; roomId: string; role: 'p1' | 'p2' | null; p2Connected: boolean }) => void;
-    }
+    },
+    getInitialState?: () => any
   ) {
-    this.roomId = roomId.toUpperCase();
+    this.roomId = roomId.toUpperCase().trim();
     this.onStateReceived = callbacks.onStateReceived;
     this.onLogReceived = callbacks.onLogReceived;
     this.onStatusChange = callbacks.onStatusChange;
+    this.getInitialState = getInitialState;
+    this.isIntentionalDisconnect = false;
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
+        const initialState = this.getInitialState ? this.getInitialState() : null;
         this.send({
           type: 'JOIN_ROOM',
           roomId: this.roomId,
+          payload: { initialState }
         });
       };
 
@@ -64,6 +77,15 @@ export class MultiplayerClient {
             role: this.playerRole,
             p2Connected: false,
           });
+        }
+
+        // Auto-reconnect if not intentional
+        if (!this.isIntentionalDisconnect) {
+          this.reconnectTimeout = setTimeout(() => {
+            if (!this.isIntentionalDisconnect) {
+              this.connect(this.roomId, callbacks, this.getInitialState);
+            }
+          }, 2000);
         }
       };
     } catch (err) {
@@ -94,7 +116,7 @@ export class MultiplayerClient {
         break;
 
       case 'PLAYER_JOINED':
-        this.isP2Connected = true;
+        this.isP2Connected = msg.payload.p2Connected;
         if (msg.payload.gameState && this.onStateReceived) {
           this.onStateReceived(msg.payload.gameState);
         }
@@ -103,11 +125,12 @@ export class MultiplayerClient {
             connected: true,
             roomId: this.roomId,
             role: this.playerRole,
-            p2Connected: true,
+            p2Connected: this.isP2Connected,
           });
         }
         if (this.onLogReceived) {
-          this.onLogReceived('🟢 Jogador 2 conectou à sala!');
+          const roleText = msg.payload.playerRole === 'p1' ? 'Jogador 1' : 'Jogador 2';
+          this.onLogReceived(`🟢 ${roleText} conectou à sala!`);
         }
         break;
 
@@ -129,6 +152,10 @@ export class MultiplayerClient {
         break;
 
       case 'STATE_UPDATED':
+        // Only apply state update if sent by the other player
+        if (msg.payload.senderRole && msg.payload.senderRole === this.playerRole) {
+          return;
+        }
         if (msg.payload.gameState && this.onStateReceived) {
           this.onStateReceived(msg.payload.gameState, msg.payload.log);
         }
@@ -172,6 +199,11 @@ export class MultiplayerClient {
   }
 
   disconnect() {
+    this.isIntentionalDisconnect = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

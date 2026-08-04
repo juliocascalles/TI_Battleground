@@ -33,7 +33,20 @@ async function startServer() {
   app.use(express.json());
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ server, path: '/api/ws' });
+
+  // Ping-pong interval to prevent proxy timeouts
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 25000);
+
+  wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+  });
 
   // API Health check
   app.get('/api/health', (_req, res) => {
@@ -41,7 +54,12 @@ async function startServer() {
   });
 
   // WebSocket connection handler
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: any) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     const clientId = generateId();
     const conn: ClientConnection = { ws, id: clientId };
     clients.set(ws, conn);
@@ -52,13 +70,13 @@ async function startServer() {
         const { type, roomId, payload } = data;
 
         if (type === 'CREATE_ROOM') {
-          const newRoomId = payload?.roomId || generateId().toUpperCase();
+          const newRoomId = (payload?.roomId || generateId()).toUpperCase().trim();
           const newRoom: RoomState = {
             id: newRoomId,
             p1Connected: true,
             p2Connected: false,
             gameState: payload?.initialState || null,
-            logs: [`Room ${newRoomId} criada. Aguardando Jogador 2...`],
+            logs: [`Sala ${newRoomId} criada. Aguardando Jogador 2...`],
           };
           rooms.set(newRoomId, newRoom);
           conn.roomId = newRoomId;
@@ -70,21 +88,23 @@ async function startServer() {
               roomId: newRoomId,
               playerRole: 'p1',
               gameState: newRoom.gameState,
+              p1Connected: true,
+              p2Connected: false,
               logs: newRoom.logs,
             }
           }));
         } else if (type === 'JOIN_ROOM') {
-          const targetRoomId = (roomId || payload?.roomId || '').toUpperCase();
+          const targetRoomId = (roomId || payload?.roomId || 'SALA1').toUpperCase().trim();
           let room = rooms.get(targetRoomId);
 
           if (!room) {
-            // Auto create room if requested
+            // Room doesn't exist, create it with P1
             room = {
               id: targetRoomId,
               p1Connected: true,
               p2Connected: false,
               gameState: payload?.initialState || null,
-              logs: [`Room ${targetRoomId} criada pelo Jogador 1.`],
+              logs: [`Sala ${targetRoomId} criada pelo Jogador 1.`],
             };
             rooms.set(targetRoomId, room);
             conn.roomId = targetRoomId;
@@ -101,8 +121,42 @@ async function startServer() {
                 logs: room.logs,
               }
             }));
+          } else if (!room.p1Connected) {
+            // Rejoin or join as Player 1
+            room.p1Connected = true;
+            conn.roomId = targetRoomId;
+            conn.playerRole = 'p1';
+
+            if (payload?.initialState && !room.gameState) {
+              room.gameState = payload.initialState;
+            }
+
+            room.logs.push('Jogador 1 conectou à sala.');
+
+            ws.send(JSON.stringify({
+              type: 'ROOM_JOINED',
+              payload: {
+                roomId: targetRoomId,
+                playerRole: 'p1',
+                gameState: room.gameState,
+                p1Connected: true,
+                p2Connected: room.p2Connected,
+                logs: room.logs,
+              }
+            }));
+
+            broadcastToRoom(targetRoomId, {
+              type: 'PLAYER_JOINED',
+              payload: {
+                playerRole: 'p1',
+                p1Connected: true,
+                p2Connected: room.p2Connected,
+                gameState: room.gameState,
+                logs: room.logs,
+              }
+            });
           } else if (!room.p2Connected) {
-            // Join as Player 2
+            // Join or rejoin as Player 2
             room.p2Connected = true;
             conn.roomId = targetRoomId;
             conn.playerRole = 'p2';
@@ -113,35 +167,40 @@ async function startServer() {
 
             room.logs.push('Jogador 2 entrou na sala! Partida iniciada.');
 
-            // Notify P2
             ws.send(JSON.stringify({
               type: 'ROOM_JOINED',
               payload: {
                 roomId: targetRoomId,
                 playerRole: 'p2',
                 gameState: room.gameState,
-                p1Connected: true,
+                p1Connected: room.p1Connected,
                 p2Connected: true,
                 logs: room.logs,
               }
             }));
 
-            // Notify P1 that P2 joined
             broadcastToRoom(targetRoomId, {
               type: 'PLAYER_JOINED',
               payload: {
                 playerRole: 'p2',
-                p1Connected: true,
+                p1Connected: room.p1Connected,
                 p2Connected: true,
                 gameState: room.gameState,
                 logs: room.logs,
               }
             });
           } else {
-            // Room is full or user rejoining
+            // Re-connecting user who already belongs or room actually full
             ws.send(JSON.stringify({
-              type: 'ROOM_FULL',
-              payload: { message: `A sala ${targetRoomId} já possui 2 jogadores.` }
+              type: 'ROOM_JOINED',
+              payload: {
+                roomId: targetRoomId,
+                playerRole: conn.playerRole || 'p2',
+                gameState: room.gameState,
+                p1Connected: room.p1Connected,
+                p2Connected: room.p2Connected,
+                logs: room.logs,
+              }
             }));
           }
         } else if (type === 'UPDATE_STATE') {
@@ -153,7 +212,6 @@ async function startServer() {
             if (payload.log) {
               room.logs.push(payload.log);
             }
-            // Broadcast state update to both clients in the room
             broadcastToRoom(currentRoomId, {
               type: 'STATE_UPDATED',
               payload: {
