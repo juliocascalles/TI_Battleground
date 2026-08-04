@@ -86,6 +86,15 @@ export const GameBoard: React.FC = () => {
   p1TypeRef.current = p1Type;
   const p2TypeRef = useRef(p2Type);
   p2TypeRef.current = p2Type;
+
+  const lastAttackRef = useRef<{
+    attackerId: string;
+    defenderId: string;
+    attackerOwner: 'player' | 'computer';
+    timestamp: number;
+  } | null>(null);
+  const processedAttackTimestampRef = useRef<number>(0);
+
   const [turnNumber, setTurnNumber] = useState<number>(1);
   const [turnsSinceLastEvent, setTurnsSinceLastEvent] = useState<number>(0);
 
@@ -644,6 +653,17 @@ export const GameBoard: React.FC = () => {
 
         setSelectedBoardCardId(defender.instanceId);
         setIsAnimating(true);
+
+        const now = Date.now();
+        const attackEvent = {
+          attackerId: attacker.instanceId,
+          defenderId: defender.instanceId,
+          attackerOwner: isP2Local ? ('computer' as const) : ('player' as const),
+          timestamp: now,
+        };
+        lastAttackRef.current = attackEvent;
+        processedAttackTimestampRef.current = now;
+
         await runAttackSequence(attacker, defender, 'up');
         setIsAnimating(false);
         setSelectedBoardCardId(null);
@@ -1305,7 +1325,7 @@ export const GameBoard: React.FC = () => {
     client.connect(
       targetRoom,
       {
-        onStateReceived: (receivedState, log) => {
+        onStateReceived: async (receivedState, log) => {
           if (receivedState) {
             isSyncingFromWsRef.current = true;
 
@@ -1313,6 +1333,48 @@ export const GameBoard: React.FC = () => {
             const newOwner = receivedState.currentTurnOwner || prevOwner;
             const myRole = mpRoleRef.current;
             const myOwnerKey = myRole === 'p2' ? 'computer' : 'player';
+            const remoteOwnerKey = myOwnerKey === 'player' ? 'computer' : 'player';
+
+            // Check if remote opponent triggered an attack animation
+            const remoteAttack = receivedState.lastAttack;
+            let runRemoteAttackAnim = false;
+            let remoteAttackerCard: GameCard | null = null;
+            let remoteDefenderCard: GameCard | null = null;
+
+            if (
+              remoteAttack &&
+              remoteAttack.timestamp &&
+              remoteAttack.timestamp !== processedAttackTimestampRef.current &&
+              remoteAttack.attackerOwner === remoteOwnerKey
+            ) {
+              processedAttackTimestampRef.current = remoteAttack.timestamp;
+              lastAttackRef.current = remoteAttack;
+
+              const remoteBoard = remoteOwnerKey === 'player' ? playerRef.current.board : computerRef.current.board;
+              const localBoard = myOwnerKey === 'player' ? playerRef.current.board : computerRef.current.board;
+
+              remoteAttackerCard = remoteBoard.find(c => c.instanceId === remoteAttack.attackerId) || null;
+              remoteDefenderCard = localBoard.find(c => c.instanceId === remoteAttack.defenderId) || null;
+
+              if (!remoteAttackerCard && receivedState.player && receivedState.computer) {
+                const recRemoteBoard = remoteOwnerKey === 'player' ? receivedState.player.board : receivedState.computer.board;
+                remoteAttackerCard = recRemoteBoard.find((c: GameCard) => c.instanceId === remoteAttack.attackerId) || null;
+              }
+              if (!remoteDefenderCard && receivedState.player && receivedState.computer) {
+                const recLocalBoard = myOwnerKey === 'player' ? receivedState.player.board : receivedState.computer.board;
+                remoteDefenderCard = recLocalBoard.find((c: GameCard) => c.instanceId === remoteAttack.defenderId) || null;
+              }
+
+              if (remoteAttackerCard && remoteDefenderCard) {
+                runRemoteAttackAnim = true;
+              }
+            }
+
+            if (runRemoteAttackAnim && remoteAttackerCard && remoteDefenderCard) {
+              setIsAnimating(true);
+              await runAttackSequence(remoteAttackerCard, remoteDefenderCard, 'down');
+              setIsAnimating(false);
+            }
 
             let finalPlayer = receivedState.player ? { ...receivedState.player } : { ...playerRef.current };
             let finalComputer = receivedState.computer ? { ...receivedState.computer } : { ...computerRef.current };
@@ -1415,6 +1477,7 @@ export const GameBoard: React.FC = () => {
                   currentTurnOwner: finalTurnOwner,
                   turnNumber: finalTurnNumber,
                   activeEvent: finalActiveEvent,
+                  lastAttack: lastAttackRef.current,
                 });
               }
             }, 100);
@@ -1439,6 +1502,7 @@ export const GameBoard: React.FC = () => {
         currentTurnOwner,
         turnNumber,
         activeEvent,
+        lastAttack: lastAttackRef.current,
       })
     );
   };
@@ -1483,6 +1547,7 @@ export const GameBoard: React.FC = () => {
         currentTurnOwner,
         turnNumber,
         activeEvent,
+        lastAttack: lastAttackRef.current,
       };
       mpClientRef.current.syncState(stateToSync, log);
     }
