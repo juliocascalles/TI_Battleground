@@ -98,7 +98,6 @@ export class FirebaseMultiplayerClient {
               roomData.lastUpdatedBy !== this.role &&
               roomData.gameState
             ) {
-              if (this.isLocalUpdate) return;
               this.callbacks.onStateReceived(roomData.gameState, roomData.lastLog);
             }
 
@@ -137,7 +136,6 @@ export class FirebaseMultiplayerClient {
   public async syncState(gameState: any, log?: string) {
     if (!this.roomId || !this.role) return;
 
-    this.isLocalUpdate = true;
     const roomRef = doc(db, 'rooms', this.roomId);
 
     try {
@@ -153,10 +151,6 @@ export class FirebaseMultiplayerClient {
       await updateDoc(roomRef, updatePayload);
     } catch (err) {
       console.error('Error syncing state to Firestore:', err);
-    } finally {
-      setTimeout(() => {
-        this.isLocalUpdate = false;
-      }, 300);
     }
   }
 

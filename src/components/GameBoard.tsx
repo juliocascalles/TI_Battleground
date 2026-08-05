@@ -558,7 +558,7 @@ export const GameBoard: React.FC = () => {
     let playerCoffeeGain = 0;
     let computerCoffeeGain = 0;
 
-    if (direction === 'up') {
+    if (attacker.owner === 'player') {
       if (defenderFired) playerCoffeeGain += 1;
       if (attackerFired) computerCoffeeGain += 1;
     } else {
@@ -1392,7 +1392,8 @@ export const GameBoard: React.FC = () => {
               if (myOwnerKey === 'player') {
                 // I am Player 1 (Azul) receiving turn pass from Player 2
                 const pLucro = finalPlayer.board.filter(c => c.modifiers.includes('lucro')).length;
-                const nextCoffee = Math.min(10, finalPlayer.coffee + 2 + pLucro);
+                const baseCoffee = Math.max(playerRef.current.coffee, finalPlayer.coffee);
+                const nextCoffee = Math.min(10, baseCoffee + 2 + pLucro);
                 let drawBlocked = Math.max(0, finalPlayer.drawBlockedRounds - 1);
                 let newHand = [...finalPlayer.hand];
                 let curDeck = [...finalDeck];
@@ -1426,7 +1427,8 @@ export const GameBoard: React.FC = () => {
               } else {
                 // I am Player 2 (Vermelho) receiving turn pass from Player 1
                 const cLucro = finalComputer.board.filter(c => c.modifiers.includes('lucro')).length;
-                const nextCoffee = Math.min(10, finalComputer.coffee + 2 + cLucro);
+                const baseCoffee = Math.max(computerRef.current.coffee, finalComputer.coffee);
+                const nextCoffee = Math.min(10, baseCoffee + 2 + cLucro);
                 let drawBlocked = Math.max(0, finalComputer.drawBlockedRounds - 1);
                 let newHand = [...finalComputer.hand];
                 let curDeck = [...finalDeck];
@@ -1467,20 +1469,18 @@ export const GameBoard: React.FC = () => {
             setTurnNumber(finalTurnNumber);
             if (finalActiveEvent !== undefined) setActiveEvent(finalActiveEvent);
 
-            setTimeout(() => {
-              isSyncingFromWsRef.current = false;
-              if (isTurnPassedToMe && mpClientRef.current) {
-                mpClientRef.current.syncState({
-                  player: finalPlayer,
-                  computer: finalComputer,
-                  deck: finalDeck,
-                  currentTurnOwner: finalTurnOwner,
-                  turnNumber: finalTurnNumber,
-                  activeEvent: finalActiveEvent,
-                  lastAttack: lastAttackRef.current,
-                });
-              }
-            }, 100);
+            if (isTurnPassedToMe && mpClientRef.current) {
+              mpClientRef.current.syncState({
+                player: finalPlayer,
+                computer: finalComputer,
+                deck: finalDeck,
+                currentTurnOwner: finalTurnOwner,
+                turnNumber: finalTurnNumber,
+                activeEvent: finalActiveEvent,
+                lastAttack: lastAttackRef.current,
+              });
+            }
+            isSyncingFromWsRef.current = false;
           }
           if (log) {
             setLogs(prev => [...prev, log]);
